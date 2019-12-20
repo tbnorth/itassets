@@ -9,6 +9,18 @@ ID_PREFIX = {
     'con': "Docker container",
     'srv': "Physical server",
     'vbx': "VirtualBox VM",
+    'svc': "A Service like Postgres, Apache",
+    'app': "An application users use",
+}
+
+ASSET_TYPE = {
+    'application': '"Terminal" asset type, that users use',
+    'container/docker': "A docker container (image instance)",
+    'image/docker': "The source (Dockerfile) for a Docker image",
+    'physical/server': "A real physical server",
+    'physical/server/service': "A service (web-server, RDMS) running directly"
+    " on a physical server",
+    'vm/virtualbox': "A VirtualBox VM",
 }
 
 
@@ -54,7 +66,9 @@ def get_options(args=None):
 
 def load_assets(asset_file):
     file_data = yaml.safe_load(open(asset_file))
-    for asset in file_data['assets']:
+    if not file_data:
+        return []
+    for asset in file_data.get('assets', []):
         asset['file_data'] = file_data
     file_data['file_path'] = os.path.abspath(asset_file)
     return file_data['assets']
@@ -77,13 +91,42 @@ def validate_assets(assets):
     for asset in assets:
         id_ = asset['id']
         filepath = asset['file_data']['file_path']
+        issues = []
         if id_.split('_')[0] not in ID_PREFIX:
-            print("WARNING: {id} in {file}".format(id=id_, file=filepath))
-            print("         has unknown prefix")
+            issues.append(("WARNING", "has unknown prefix"))
+        if asset.get('type') not in ASSET_TYPE:
+            issues.append(("ERROR", f"has unknown type {asset.get('type')}"))
         for dep in asset.get('depends_on', []):
             if dep not in seen:
-                print("WARNING: {id} in {file}".format(id=id_, file=filepath))
-                print(f"         depends on undefined id={dep}")
+                issues.append(("WARNING", f"depends on undefined id={dep}"))
+        if issues:
+            print(f"\nASSET: {id_} in {filepath}")
+        for type_, description in issues:
+            print(f"    {type_}: {description}")
+
+
+def assets_to_dot(assets):
+    other = {i['id']: i for i in assets}
+    ans = ['digraph "Assets" {', "  graph [rankdir=LR]"]
+    for asset in assets:
+        for dep in asset.get('depends_on', []):
+            if dep not in other:
+                ans.append(f'  n{len(other)} [label="???"]')
+                other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
+
+    for _node_id, asset in enumerate(assets):
+        asset['_node_id'] = f"n{_node_id}"
+    for asset in assets:
+        ans.append(
+            '  {id} [label="{name}"]'.format(
+                id=asset['_node_id'], name=asset['name']
+            )
+        )
+        for dep in asset.get('depends_on', []):
+            ans.append(f"  {asset['_node_id']} -> {other[dep]['_node_id']}")
+
+    ans.append('}')
+    return '\n'.join(ans)
 
 
 def main():
@@ -92,6 +135,8 @@ def main():
     for asset_file in chain.from_iterable(opt.assets):
         assets.extend(load_assets(asset_file))
     validate_assets(assets)
+    with open("assets.dot", 'w') as out:
+        out.write(assets_to_dot(assets))
 
 
 if __name__ == "__main__":
