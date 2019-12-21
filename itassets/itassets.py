@@ -1,6 +1,6 @@
 import argparse
 import os
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from itertools import chain
 
 import yaml
@@ -14,20 +14,43 @@ ID_PREFIX = {
     'app': "An application users use",
 }
 
-AT = namedtuple("AssetType", "description dot_shape")
+AT = namedtuple("AssetType", "description shape color top bottom")
+# shape / color for drawing graphs
+# top => top level node like an application, needs no dependents to
+#        justify its existence
+# bottom => bottom level node like a server, doesn't need to depend on anything
 ASSET_TYPE = {
-    'application': AT('"Terminal" asset type, that users use', 'ellipse'),
-    'container/docker': AT("A docker container (image instance)", 'trapezium'),
-    'image/docker': AT(
-        "The source (Dockerfile) for a Docker image", 'house'
+    'application': AT(
+        '"Terminal" asset type, that users use',
+        'ellipse',
+        'green',
+        True,
+        False,
     ),
-    'physical/server': AT("A real physical server", 'box'),
+    'container/docker': AT(
+        "A docker container (image instance)", 'box3d', 'green', False, False
+    ),
+    'image/docker': AT(
+        "The source (Dockerfile) for a Docker image",
+        'house',
+        'darkgreen',
+        True,
+        False,
+    ),
+    'physical/server': AT(
+        "A real physical server", 'box', 'gray', False, True
+    ),
     'physical/server/service': AT(
         "A service (web-server, RDMS) running directly"
         " on a physical server",
         'tripleoctagon',
+        'pink',
+        False,
+        False,
     ),
-    'vm/virtualbox': AT("A VirtualBox VM", 'doubleoctagon'),
+    'vm/virtualbox': AT(
+        "A VirtualBox VM", 'doubleoctagon', 'pink', False, False
+    ),
 }
 
 
@@ -83,7 +106,8 @@ def load_assets(asset_file):
 
 def validate_assets(assets):
     seen = {}
-    # check for duplicate IDs
+    dependents = defaultdict(lambda: [])
+    # check for duplicate IDs, dependents
     for asset in assets:
         id_ = asset['id']
         if id_ in seen:
@@ -94,6 +118,8 @@ def validate_assets(assets):
             print(f"       Duplicated in {asset['file_data']['file_path']}")
         else:
             seen[id_] = asset
+        for dep in asset.get('depends_on', []):
+            dependents[dep].append(id_)
     # check all depends_on IDs are defined, ID prefixes recognized
     for asset in assets:
         id_ = asset['id']
@@ -106,6 +132,19 @@ def validate_assets(assets):
         for dep in asset.get('depends_on', []):
             if dep not in seen:
                 issues.append(("WARNING", f"depends on undefined id={dep}"))
+        if (
+            id_ not in dependents
+            and 'type' in asset
+            and not ASSET_TYPE[asset['type']].top
+        ):
+            issues.append(("WARNING", "non-top-level asset has no dependents"))
+        if (
+            not asset.get('depends_on')
+            and not ASSET_TYPE[asset['type']].bottom
+        ):
+            issues.append(
+                ("WARNING", "non-bottom-level asset has no dependencies")
+            )
         if issues:
             print(f"\nASSET: {id_} in {filepath}")
         for type_, description in issues:
@@ -119,7 +158,8 @@ def assets_to_dot(assets):
         for dep in asset.get('depends_on', []):
             if dep not in other:
                 ans.append(
-                    f'  n{len(other)} [label="???", shape="tripleoctagon"]'
+                    f'  n{len(other)} [label="???", shape="tripleoctagon", '
+                    'fillcolor="red", style="filled"]'
                 )
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
 
@@ -127,10 +167,12 @@ def assets_to_dot(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
         ans.append(
-            '  {id} [label="{name}", shape="{shape}"]'.format(
+            '  {id} [label="{name}", shape="{shape}", '
+            'fillcolor="{color}", style="filled"]'.format(
                 id=asset['_node_id'],
                 name=asset['name'],
-                shape=ASSET_TYPE[asset["type"]].dot_shape,
+                shape=ASSET_TYPE[asset["type"]].shape,
+                color=ASSET_TYPE[asset["type"]].color,
             )
         )
         for dep in asset.get('depends_on', []):
