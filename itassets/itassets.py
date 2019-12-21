@@ -1,5 +1,6 @@
 import argparse
 import os
+from collections import namedtuple
 from itertools import chain
 
 import yaml
@@ -13,14 +14,20 @@ ID_PREFIX = {
     'app': "An application users use",
 }
 
+AT = namedtuple("AssetType", "description dot_shape")
 ASSET_TYPE = {
-    'application': '"Terminal" asset type, that users use',
-    'container/docker': "A docker container (image instance)",
-    'image/docker': "The source (Dockerfile) for a Docker image",
-    'physical/server': "A real physical server",
-    'physical/server/service': "A service (web-server, RDMS) running directly"
-    " on a physical server",
-    'vm/virtualbox': "A VirtualBox VM",
+    'application': AT('"Terminal" asset type, that users use', 'ellipse'),
+    'container/docker': AT("A docker container (image instance)", 'trapezium'),
+    'image/docker': AT(
+        "The source (Dockerfile) for a Docker image", 'house'
+    ),
+    'physical/server': AT("A real physical server", 'box'),
+    'physical/server/service': AT(
+        "A service (web-server, RDMS) running directly"
+        " on a physical server",
+        'tripleoctagon',
+    ),
+    'vm/virtualbox': AT("A VirtualBox VM", 'doubleoctagon'),
 }
 
 
@@ -111,15 +118,19 @@ def assets_to_dot(assets):
     for asset in assets:
         for dep in asset.get('depends_on', []):
             if dep not in other:
-                ans.append(f'  n{len(other)} [label="???"]')
+                ans.append(
+                    f'  n{len(other)} [label="???", shape="tripleoctagon"]'
+                )
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
 
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
         ans.append(
-            '  {id} [label="{name}"]'.format(
-                id=asset['_node_id'], name=asset['name']
+            '  {id} [label="{name}", shape="{shape}"]'.format(
+                id=asset['_node_id'],
+                name=asset['name'],
+                shape=ASSET_TYPE[asset["type"]].dot_shape,
             )
         )
         for dep in asset.get('depends_on', []):
