@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 from collections import defaultdict, namedtuple
 from itertools import chain
 
@@ -32,10 +33,10 @@ ASSET_TYPE = {
     ),
     'image/docker': AT(
         "The source (Dockerfile) for a Docker image",
-        'house',
-        'darkgreen',
-        True,
+        'note',
+        'cyan',
         False,
+        True,
     ),
     'physical/server': AT(
         "A real physical server", 'box', 'gray', False, True
@@ -52,6 +53,58 @@ ASSET_TYPE = {
         "A VirtualBox VM", 'doubleoctagon', 'pink', False, False
     ),
 }
+
+VALIDATORS = defaultdict(lambda: [])
+VALIDATORS_COMPILED = {}
+
+
+def validator(type_):
+    def add_validator(function, type_=type_):
+        VALIDATORS[type_].append(function)
+
+    return add_validator
+
+
+# do this first, as it may explain subsequent KeyErrors
+@validator('.*')
+def known_asset_type(asset, lookup):
+    if asset.get('type') not in ASSET_TYPE:
+        yield 'ERROR', f"Has unknown type {asset.get('type')}"
+
+
+@validator('.*')
+def no_undef_depends(asset, lookup):
+    for dep in asset.get('depends_on', []):
+        if dep not in lookup:
+            yield 'WARNING', f"Depends on undefined asset ID={dep}"
+
+
+@validator('.*')
+def known_id_prefix(asset, lookup):
+    if asset['id'].split('_')[0] not in ID_PREFIX:
+        yield 'WARNING', "Has unknown prefix"
+
+
+@validator('.*')
+def dependents_if_not_top(asset, lookup):
+    if (
+        asset['id'] not in lookup
+        and 'type' in asset
+        and not ASSET_TYPE[asset['type']].top
+    ):
+        yield 'WARNING', "Non-top-level asset has no dependents"
+
+
+@validator('.*')
+def dependencies_if_not_bottom(asset, lookup):
+    if not asset.get('depends_on') and not ASSET_TYPE[asset['type']].bottom:
+        yield 'WARNING', "Non-bottom-level asset has no dependencies"
+
+
+@validator('.*')
+def tagged_has_issues(asset, lookup):
+    if 'has_issues' in asset.get('tags', []):
+        yield 'WARNING', "Has 'has_issues' tag"
 
 
 def make_parser():
@@ -107,6 +160,7 @@ def load_assets(asset_file):
 def validate_assets(assets):
     seen = {}
     dependents = defaultdict(lambda: [])
+    failures = {}
     # check for duplicate IDs, dependents
     for asset in assets:
         id_ = asset['id']
@@ -121,37 +175,37 @@ def validate_assets(assets):
         for dep in asset.get('depends_on', []):
             dependents[dep].append(id_)
     # check all depends_on IDs are defined, ID prefixes recognized
+    if not VALIDATORS_COMPILED:
+        VALIDATORS_COMPILED.update(
+            {re.compile(k): v for k, v in VALIDATORS.items()}
+        )
     for asset in assets:
-        id_ = asset['id']
-        filepath = asset['file_data']['file_path']
         issues = []
-        if id_.split('_')[0] not in ID_PREFIX:
-            issues.append(("WARNING", "has unknown prefix"))
-        if asset.get('type') not in ASSET_TYPE:
-            issues.append(("ERROR", f"has unknown type {asset.get('type')}"))
-        for dep in asset.get('depends_on', []):
-            if dep not in seen:
-                issues.append(("WARNING", f"depends on undefined id={dep}"))
-        if (
-            id_ not in dependents
-            and 'type' in asset
-            and not ASSET_TYPE[asset['type']].top
-        ):
-            issues.append(("WARNING", "non-top-level asset has no dependents"))
-        if (
-            not asset.get('depends_on')
-            and not ASSET_TYPE[asset['type']].bottom
-        ):
-            issues.append(
-                ("WARNING", "non-bottom-level asset has no dependencies")
-            )
-        if issues:
-            print(f"\nASSET: {id_} in {filepath}")
-        for type_, description in issues:
-            print(f"    {type_}: {description}")
+        try:
+            for pattern, validators in VALIDATORS_COMPILED.items():
+                if pattern.search(asset.get('type', 'NOT-SPECIFIED')):
+                    for validator in validators:
+                        issues.extend(list(validator(asset, seen)))
+        finally:
+            if issues:
+                failures[asset['id']] = issues
+                print(
+                    f"\nASSET: {asset['id']} '{asset.get('name')}'"
+                    f"\n       in {asset['file_data']['file_path']}"
+                )
+            for type_, description in issues:
+                print(f"    {type_}: {description}")
+
+    return failures
 
 
-def assets_to_dot(assets):
+def node_dot(id_, attr):
+    return "  {id} [{attrs}]".format(
+        id=id_, attrs=', '.join(f'{k}="{v}"' for k, v in attr.items())
+    )
+
+
+def assets_to_dot(assets, issues):
     other = {i['id']: i for i in assets}
     ans = ['digraph "Assets" {', "  graph [rankdir=LR]"]
     for asset in assets:
@@ -159,22 +213,21 @@ def assets_to_dot(assets):
             if dep not in other:
                 ans.append(
                     f'  n{len(other)} [label="???", shape="tripleoctagon", '
-                    'fillcolor="red", style="filled"]'
+                    'fillcolor="pink", style="filled"]'
                 )
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
 
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
-        ans.append(
-            '  {id} [label="{name}", shape="{shape}", '
-            'fillcolor="{color}", style="filled"]'.format(
-                id=asset['_node_id'],
-                name=asset['name'],
-                shape=ASSET_TYPE[asset["type"]].shape,
-                color=ASSET_TYPE[asset["type"]].color,
-            )
+        attr = dict(
+            label=asset.get('name'), shape=ASSET_TYPE[asset["type"]].shape
         )
+        if asset['id'] in issues:
+            attr['style'] = 'filled'
+            attr['fillcolor'] = 'pink'
+        ans.append(node_dot(asset['_node_id'], attr))
+
         for dep in asset.get('depends_on', []):
             ans.append(f"  {asset['_node_id']} -> {other[dep]['_node_id']}")
 
@@ -187,9 +240,9 @@ def main():
     assets = []
     for asset_file in chain.from_iterable(opt.assets):
         assets.extend(load_assets(asset_file))
-    validate_assets(assets)
+    issues = validate_assets(assets)
     with open("assets.dot", 'w') as out:
-        out.write(assets_to_dot(assets))
+        out.write(assets_to_dot(assets, issues))
 
 
 if __name__ == "__main__":
