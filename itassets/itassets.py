@@ -67,28 +67,28 @@ def validator(type_):
 
 # do this first, as it may explain subsequent KeyErrors
 @validator('.*')
-def known_asset_type(asset, lookup):
+def known_asset_type(asset, lookup, dependents):
     if asset.get('type') not in ASSET_TYPE:
         yield 'ERROR', f"Has unknown type {asset.get('type')}"
 
 
 @validator('.*')
-def no_undef_depends(asset, lookup):
+def no_undef_depends(asset, lookup, dependents):
     for dep in asset.get('depends_on', []):
         if dep not in lookup:
             yield 'WARNING', f"Depends on undefined asset ID={dep}"
 
 
 @validator('.*')
-def known_id_prefix(asset, lookup):
+def known_id_prefix(asset, lookup, dependents):
     if asset['id'].split('_')[0] not in ID_PREFIX:
         yield 'WARNING', "Has unknown prefix"
 
 
 @validator('.*')
-def dependents_if_not_top(asset, lookup):
+def dependents_if_not_top(asset, lookup, dependents):
     if (
-        asset['id'] not in lookup
+        asset['id'] not in dependents
         and 'type' in asset
         and not ASSET_TYPE[asset['type']].top
     ):
@@ -96,15 +96,27 @@ def dependents_if_not_top(asset, lookup):
 
 
 @validator('.*')
-def dependencies_if_not_bottom(asset, lookup):
+def dependencies_if_not_bottom(asset, lookup, dependents):
     if not asset.get('depends_on') and not ASSET_TYPE[asset['type']].bottom:
         yield 'WARNING', "Non-bottom-level asset has no dependencies"
 
 
 @validator('.*')
-def tagged_has_issues(asset, lookup):
-    if 'has_issues' in asset.get('tags', []):
-        yield 'WARNING', "Has 'has_issues' tag"
+def tagged_needs_work(asset, lookup, dependents):
+    if 'needs_work' in asset.get('tags', []):
+        yield 'WARNING', "Has 'needs_work' tag"
+
+
+@validator('image/docker')
+def check_location(asset, lookup, dependents):
+    if asset.get('location'):
+        yield 'WARNING', "Image definition missing 'location' field"
+
+
+@validator('asset')
+def check_owner(asset, lookup, dependents):
+    if asset.get('owner'):
+        yield 'WARNING', "Application definition missing 'owner' field"
 
 
 def make_parser():
@@ -162,9 +174,11 @@ def validate_assets(assets):
     dependents = defaultdict(lambda: [])
     failures = {}
     # check for duplicate IDs, dependents
+    duplicate_IDs = False
     for asset in assets:
         id_ = asset['id']
         if id_ in seen:
+            duplicate_IDs = True
             print(f"ERROR: {id_} already seen")
             print(
                 f"       First used in {seen[id_]['file_data']['file_path']}"
@@ -174,6 +188,9 @@ def validate_assets(assets):
             seen[id_] = asset
         for dep in asset.get('depends_on', []):
             dependents[dep].append(id_)
+    if duplicate_IDs:
+        raise Exception("Can't continue with duplicate IDs present")
+
     # check all depends_on IDs are defined, ID prefixes recognized
     if not VALIDATORS_COMPILED:
         VALIDATORS_COMPILED.update(
@@ -185,7 +202,7 @@ def validate_assets(assets):
             for pattern, validators in VALIDATORS_COMPILED.items():
                 if pattern.search(asset.get('type', 'NOT-SPECIFIED')):
                     for validator in validators:
-                        issues.extend(list(validator(asset, seen)))
+                        issues.extend(list(validator(asset, seen, dependents)))
         finally:
             if issues:
                 failures[asset['id']] = issues
@@ -220,12 +237,21 @@ def assets_to_dot(assets, issues):
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
+        tooltip = []
+        for k, v in asset.items():
+            if isinstance(v, str) and not k.startswith('_'):
+                tooltip.append(f"{k}: {v}")
+        for tag in asset.get('tags', []):
+            tooltip.append(f"TAG {tag}")
+        tooltip.append(f"Defined in {asset['file_data']['file_path']}")
         attr = dict(
             label=asset.get('name'), shape=ASSET_TYPE[asset["type"]].shape
         )
         if asset['id'] in issues:
+            tooltip[:0] = ["%s %s" % (i, j) for i, j in issues[asset['id']]]
             attr['style'] = 'filled'
             attr['fillcolor'] = 'pink'
+        attr['tooltip'] = '\\n'.join(tooltip)
         ans.append(node_dot(asset['_node_id'], attr))
 
         for dep in asset.get('depends_on', []):
