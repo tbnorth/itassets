@@ -15,7 +15,7 @@ ID_PREFIX = {
     'app': "An application users use",
 }
 
-AT = namedtuple("AssetType", "description shape color top bottom")
+AT = namedtuple("AssetType", "description style color top bottom")
 # shape / color for drawing graphs
 # top => top level node like an application, needs no dependents to
 #        justify its existence
@@ -23,34 +23,38 @@ AT = namedtuple("AssetType", "description shape color top bottom")
 ASSET_TYPE = {
     'application': AT(
         '"Terminal" asset type, that users use',
-        'ellipse',
+        'shape="ellipse"',
         'green',
         True,
         False,
     ),
     'container/docker': AT(
-        "A docker container (image instance)", 'box3d', 'green', False, False
+        "A docker container (image instance)",
+        'shape="box3d"',
+        'green',
+        False,
+        False,
     ),
     'image/docker': AT(
         "The source (Dockerfile) for a Docker image",
-        'note',
+        'shape="note"',
         'cyan',
         False,
         True,
     ),
     'physical/server': AT(
-        "A real physical server", 'box', 'gray', False, True
+        "A real physical server", 'shape="box"', 'gray', False, True
     ),
     'physical/server/service': AT(
         "A service (web-server, RDMS) running directly"
         " on a physical server",
-        'tripleoctagon',
+        'shape="octagon"',
         'pink',
         False,
         False,
     ),
     'vm/virtualbox': AT(
-        "A VirtualBox VM", 'doubleoctagon', 'pink', False, False
+        "A VirtualBox VM", 'shape="box", peripheries="2"', 'pink', False, False
     ),
 }
 
@@ -109,14 +113,26 @@ def tagged_needs_work(asset, lookup, dependents):
 
 @validator('image/docker')
 def check_location(asset, lookup, dependents):
-    if asset.get('location'):
+    if not asset.get('location'):
         yield 'WARNING', "Image definition missing 'location' field"
 
 
-@validator('asset')
+@validator('application')
 def check_owner(asset, lookup, dependents):
-    if asset.get('owner'):
+    if not asset.get('owner'):
         yield 'WARNING', "Application definition missing 'owner' field"
+
+
+@validator('container/docker')
+def container_def(asset, lookup, dependents):
+    if not any(
+        lookup.get(i, {'type': None})['type'] == 'image/docker'
+        for i in asset.get('depends_on', [])
+    ):
+        yield (
+            'WARNING',
+            "'container/docker' should define 'image/docker' dependency",
+        )
 
 
 def make_parser():
@@ -218,18 +234,26 @@ def validate_assets(assets):
 
 def node_dot(id_, attr):
     return "  {id} [{attrs}]".format(
-        id=id_, attrs=', '.join(f'{k}="{v}"' for k, v in attr.items())
+        id=id_,
+        attrs=', '.join(
+            (f'{k}="{v}"' if k else v[0]) for k, v in attr.items()
+        ),
     )
 
 
 def assets_to_dot(assets, issues):
     other = {i['id']: i for i in assets}
-    ans = ['digraph "Assets" {', "  graph [rankdir=LR]"]
+    ans = [
+        'digraph "Assets" {',
+        "  graph [rankdir=LR]",
+        '  node [fontname="Ariel"]',
+    ]
+    os.makedirs("asset_reports", exist_ok=True)
     for asset in assets:
         for dep in asset.get('depends_on', []):
             if dep not in other:
                 ans.append(
-                    f'  n{len(other)} [label="???", shape="tripleoctagon", '
+                    f'  n{len(other)} [label="???", shape="doubleoctagon", '
                     'fillcolor="pink", style="filled"]'
                 )
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
@@ -245,12 +269,18 @@ def assets_to_dot(assets, issues):
             tooltip.append(f"TAG {tag}")
         tooltip.append(f"Defined in {asset['file_data']['file_path']}")
         attr = dict(
-            label=asset.get('name'), shape=ASSET_TYPE[asset["type"]].shape
+            label=asset.get('name'),
+            URL=f"./asset_reports/n{asset['_node_id']}.html",
         )
+        attr[None] = (ASSET_TYPE[asset["type"]].style,)
         if asset['id'] in issues:
             tooltip[:0] = ["%s %s" % (i, j) for i, j in issues[asset['id']]]
             attr['style'] = 'filled'
             attr['fillcolor'] = 'pink'
+        with open(f"asset_reports/n{asset['_node_id']}.html", 'w') as rep:
+            rep.write(f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>")
+            rep.write('\n'.join(tooltip))
+            rep.write("</pre>")
         attr['tooltip'] = '\\n'.join(tooltip)
         ans.append(node_dot(asset['_node_id'], attr))
 
