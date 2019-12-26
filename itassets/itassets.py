@@ -15,7 +15,7 @@ ID_PREFIX = {
     'app': "An application users use",
 }
 
-AT = namedtuple("AssetType", "description style color top bottom")
+AT = namedtuple("AssetType", "description style color tags fields depends")
 # shape / color for drawing graphs
 # top => top level node like an application, needs no dependents to
 #        justify its existence
@@ -25,36 +25,46 @@ ASSET_TYPE = {
         '"Terminal" asset type, that users use',
         'shape="ellipse"',
         'green',
-        True,
-        False,
+        ['top'],
+        ['owner'],
+        [],
     ),
     'container/docker': AT(
         "A docker container (image instance)",
         'shape="box3d"',
         'green',
-        False,
-        False,
+        [],
+        [],
+        # FIXME: allow 'physical/server' OR 'cloud/server' using re maybe
+        ['image/docker', 'physical/server'],
     ),
     'image/docker': AT(
         "The source (Dockerfile) for a Docker image",
         'shape="note"',
         'cyan',
-        False,
-        True,
+        ['bottom'],
+        ['location'],
+        [],
     ),
     'physical/server': AT(
-        "A real physical server", 'shape="box"', 'gray', False, True
+        "A real physical server", 'shape="box"', 'gray', ['bottom'], [], []
     ),
     'physical/server/service': AT(
         "A service (web-server, RDMS) running directly"
         " on a physical server",
         'shape="octagon"',
         'pink',
-        False,
-        False,
+        [],
+        [],
+        ['physical/server'],
     ),
     'vm/virtualbox': AT(
-        "A VirtualBox VM", 'shape="box", peripheries="2"', 'pink', False, False
+        "A VirtualBox VM",
+        'shape="box", peripheries="2"',
+        'pink',
+        [],
+        [],
+        ['physical/server'],
     ),
 }
 
@@ -94,14 +104,17 @@ def dependents_if_not_top(asset, lookup, dependents):
     if (
         asset['id'] not in dependents
         and 'type' in asset
-        and not ASSET_TYPE[asset['type']].top
+        and 'top' not in ASSET_TYPE[asset['type']].tags
     ):
         yield 'WARNING', "Non-top-level asset has no dependents"
 
 
 @validator('.*')
 def dependencies_if_not_bottom(asset, lookup, dependents):
-    if not asset.get('depends_on') and not ASSET_TYPE[asset['type']].bottom:
+    if (
+        not asset.get('depends_on')
+        and 'bottom' not in ASSET_TYPE[asset['type']].tags
+    ):
         yield 'WARNING', "Non-bottom-level asset has no dependencies"
 
 
@@ -111,28 +124,23 @@ def tagged_needs_work(asset, lookup, dependents):
         yield 'WARNING', "Has 'needs_work' tag"
 
 
-@validator('image/docker')
-def check_location(asset, lookup, dependents):
-    if not asset.get('location'):
-        yield 'WARNING', "Image definition missing 'location' field"
+@validator('.*')
+def check_fields(asset, lookup, dependents):
+    type_ = asset['type']
+    for field in ASSET_TYPE[type_].fields:
+        if not asset.get(field):
+            yield 'WARNING', f"'{type_} definition missing '{field}' field"
 
 
-@validator('application')
-def check_owner(asset, lookup, dependents):
-    if not asset.get('owner'):
-        yield 'WARNING', "Application definition missing 'owner' field"
-
-
-@validator('container/docker')
-def container_def(asset, lookup, dependents):
-    if not any(
-        lookup.get(i, {'type': None})['type'] == 'image/docker'
-        for i in asset.get('depends_on', [])
-    ):
-        yield (
-            'WARNING',
-            "'container/docker' should define 'image/docker' dependency",
-        )
+@validator('.*')
+def check_depends(asset, lookup, dependents):
+    type_ = asset['type']
+    for dep in ASSET_TYPE[type_].depends:
+        if not any(
+            lookup.get(i, {'type': None})['type'] == dep
+            for i in asset.get('depends_on', [])
+        ):
+            yield ('WARNING', f"'{type_}' should define '{dep}' dependency")
 
 
 def make_parser():
