@@ -7,12 +7,13 @@ from itertools import chain
 import yaml
 
 ID_PREFIX = {
-    'dok': "Docker image definition / source",
-    'con': "Docker container",
-    'srv': "Physical server",
-    'vbx': "VirtualBox VM",
-    'svc': "A Service like Postgres, Apache",
     'app': "An application users use",
+    'con': "Docker container",
+    'dok': "Docker image definition / source",
+    'srv': "Physical server",
+    'sto': "A storage entity",
+    'svc': "A Service like Postgres, Apache",
+    'vbx': "VirtualBox VM",
 }
 
 AT = namedtuple("AssetType", "description style color tags fields depends")
@@ -23,7 +24,7 @@ AT = namedtuple("AssetType", "description style color tags fields depends")
 ASSET_TYPE = {
     'application': AT(
         '"Terminal" asset type, that users use',
-        'shape="ellipse"',
+        "shape=ellipse",
         'green',
         ['top'],
         ['owner'],
@@ -36,7 +37,7 @@ ASSET_TYPE = {
         [],
         [],
         # FIXME: allow 'physical/server' OR 'cloud/server' using re maybe
-        ['image/docker', 'physical/server'],
+        ['image/docker', 'physical/server', 'storage/.*'],
     ),
     'image/docker': AT(
         "The source (Dockerfile) for a Docker image",
@@ -64,7 +65,18 @@ ASSET_TYPE = {
         'pink',
         [],
         [],
-        ['physical/server'],
+        ['physical/server', 'storage/.*'],
+    ),
+    'storage/local': AT(
+        "A local storage solutions, requires backup",
+        'shape=cylinder',
+        'white',
+        [],
+        ['location'],
+        ['backup'],
+    ),
+    'backup': AT(
+        "A backup solution", 'shape=folder', 'white', [], ['location'], []
     ),
 }
 
@@ -89,7 +101,7 @@ def known_asset_type(asset, lookup, dependents):
 @validator('.*')
 def no_undef_depends(asset, lookup, dependents):
     for dep in asset.get('depends_on', []):
-        if dep not in lookup:
+        if dep not in lookup and not dep.startswith('^'):
             yield 'WARNING', f"Depends on undefined asset ID={dep}"
 
 
@@ -136,11 +148,14 @@ def check_fields(asset, lookup, dependents):
 def check_depends(asset, lookup, dependents):
     type_ = asset['type']
     for dep in ASSET_TYPE[type_].depends:
+        if '^' + dep in asset.get('depends_on', []):
+            yield 'NOTE', f"Specifically excludes '{dep}' dependency"
+            continue
         if not any(
-            lookup.get(i, {'type': None})['type'] == dep
+            re.search(dep, lookup.get(i, {'type': "NO-TYPE"})['type'])
             for i in asset.get('depends_on', [])
         ):
-            yield ('WARNING', f"'{type_}' should define '{dep}' dependency")
+            yield 'WARNING', f"'{type_}' should define '{dep}' dependency"
 
 
 def make_parser():
@@ -252,48 +267,67 @@ def node_dot(id_, attr):
 def assets_to_dot(assets, issues):
     other = {i['id']: i for i in assets}
     ans = [
-        'digraph "Assets" {',
-        "  graph [rankdir=LR]",
-        '  node [fontname="Ariel"]',
+        "digraph Assets {",
+        "  graph [rankdir=LR, concentrate=true]",
+        "  node [fontname=Arial, fontsize=10]",
     ]
     os.makedirs("asset_reports", exist_ok=True)
     for asset in assets:
-        for dep in asset.get('depends_on', []):
+        real_deps = [
+            i for i in asset.get('depends_on', []) if not i.startswith('^')
+        ]
+        for dep in real_deps:
             if dep not in other:
                 ans.append(
-                    f'  n{len(other)} [label="???", shape="doubleoctagon", '
-                    'fillcolor="pink", style="filled"]'
+                    f'  n{len(other)} [label="???", shape=doubleoctagon, '
+                    'fillcolor=pink, style=filled]'
                 )
+                # used just to display missing asset on graph plot
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
 
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
+        real_deps = [
+            i for i in asset.get('depends_on', []) if not i.startswith('^')
+        ]
         tooltip = []
+        # put asset attributes in tooltip
         for k, v in asset.items():
             if isinstance(v, str) and not k.startswith('_'):
                 tooltip.append(f"{k}: {v}")
+        # put tags in tooltip
         for tag in asset.get('tags', []):
             tooltip.append(f"TAG {tag}")
+        # include path to asset def. file in tooltip
         tooltip.append(f"Defined in {asset['file_data']['file_path']}")
+        # dict of dot / graphviz node attributes
         attr = dict(
             label=asset.get('name'),
             URL=f"./asset_reports/n{asset['_node_id']}.html",
         )
+        # `style` is compound 'shape=box, color=cyan', so key is None
         attr[None] = (ASSET_TYPE[asset["type"]].style,)
+        # add validation issues to top of tooltip
         if asset['id'] in issues:
             tooltip[:0] = ["%s %s" % (i, j) for i, j in issues[asset['id']]]
-            attr['style'] = 'filled'
-            attr['fillcolor'] = 'pink'
+            if any(i[0] != 'NOTE' for i in issues[asset['id']]):
+                attr['style'] = 'filled'
+                attr['fillcolor'] = 'pink'
+        # write tooltip to validation HTML page for copy / paste etc.
         with open(f"asset_reports/n{asset['_node_id']}.html", 'w') as rep:
             rep.write(f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>")
             rep.write('\n'.join(tooltip))
             rep.write("</pre>")
+        # tooltip dict -> text
         attr['tooltip'] = '\\n'.join(tooltip)
+
+        # write node to graphviz file
         ans.append(node_dot(asset['_node_id'], attr))
 
-        for dep in asset.get('depends_on', []):
-            ans.append(f"  {asset['_node_id']} -> {other[dep]['_node_id']}")
+        # write links to graphviz file
+        for dep in real_deps:
+            ans.append(f"  {other[dep]['_node_id']} -> {asset['_node_id']}")
 
     ans.append('}')
     return '\n'.join(ans)
