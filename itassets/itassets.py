@@ -6,17 +6,10 @@ from itertools import chain
 
 import yaml
 
-ID_PREFIX = {
-    'app': "An application users use",
-    'con': "Docker container",
-    'dok': "Docker image definition / source",
-    'srv': "Physical server",
-    'sto': "A storage entity",
-    'svc': "A Service like Postgres, Apache",
-    'vbx': "VirtualBox VM",
-}
+AT = namedtuple(
+    "AssetType", "description style color tags fields depends prefix"
+)
 
-AT = namedtuple("AssetType", "description style color tags fields depends")
 # shape / color for drawing graphs
 # top => top level node like an application, needs no dependents to
 #        justify its existence
@@ -24,61 +17,90 @@ AT = namedtuple("AssetType", "description style color tags fields depends")
 ASSET_TYPE = {
     'application': AT(
         '"Terminal" asset type, that users use',
-        "shape=ellipse",
+        "shape=oval, width=1.5",
         'green',
         ['top'],
         ['owner'],
         [],
+        'app',
     ),
     'container/docker': AT(
         "A docker container (image instance)",
-        'shape="box3d"',
+        'shape="box3d", width=1.5',
         'green',
         [],
         [],
         # FIXME: allow 'physical/server' OR 'cloud/server' using re maybe
         ['image/docker', 'physical/server', 'storage/.*'],
+        'con',
+    ),
+    'drive': AT(
+        "A physical drive",
+        'shape=cylinder, width=1.25',
+        'cyan',
+        [],
+        ['location', 'size'],
+        ['physical/server'],
+        'drv',
     ),
     'image/docker': AT(
         "The source (Dockerfile) for a Docker image",
-        'shape="note"',
+        'shape=note, width=1.5',
         'cyan',
         ['bottom'],
         ['location'],
         [],
+        'img',
     ),
     'physical/server': AT(
-        "A real physical server", 'shape="box"', 'gray', ['bottom'], [], []
+        "A real physical server",
+        'shape=box, width=1',
+        'gray',
+        ['bottom'],
+        [],
+        [],
+        'srv',
     ),
     'physical/server/service': AT(
         "A service (web-server, RDMS) running directly"
         " on a physical server",
-        'shape="octagon"',
+        'shape=octagon, width=1.5',
         'pink',
         [],
         [],
         ['physical/server'],
+        'psvc',
     ),
     'vm/virtualbox': AT(
         "A VirtualBox VM",
-        'shape="box", peripheries="2"',
+        'shape=box, peripheries="2", width=1.4',
         'pink',
         [],
         [],
         ['physical/server', 'storage/.*'],
+        'vbx',
     ),
     'storage/local': AT(
         "A local storage solutions, requires backup",
-        'shape=cylinder',
+        'shape=folder,width=1.5',
         'white',
         [],
         ['location'],
-        ['backup'],
+        ['backup', 'drive'],
+        'sto',
     ),
     'backup': AT(
-        "A backup solution", 'shape=folder', 'white', [], ['location'], []
+        "A backup solution",
+        'shape=Msquare,width=1.5',
+        'white',
+        [],
+        ['location'],
+        [],
+        'bak',
     ),
 }
+
+ID_PREFIX = {v.prefix: v.description for v in ASSET_TYPE.values()}
 
 VALIDATORS = defaultdict(lambda: [])
 VALIDATORS_COMPILED = {}
@@ -128,6 +150,12 @@ def dependencies_if_not_bottom(asset, lookup, dependents):
         and 'bottom' not in ASSET_TYPE[asset['type']].tags
     ):
         yield 'WARNING', "Non-bottom-level asset has no dependencies"
+
+
+@validator('.*')
+def has_open_issues(asset, lookup, dependents):
+    if asset.get('open_issues'):
+        yield 'WARNING', "Has open issues"
 
 
 @validator('.*')
@@ -264,6 +292,56 @@ def node_dot(id_, attr):
     )
 
 
+def dot_node_name(text):
+    """Handle wide node names"""
+    hlen = len(text) // 2
+    if hlen <= 8:
+        return text
+    i = 0
+    at = None
+    while i < hlen - 1:
+        if text[hlen + i] in ' _-':
+            at = hlen + i
+            break
+        if text[hlen - i] in ' _-':
+            at = hlen - i
+            break
+        i += 1
+    if at is not None:
+        return text[:at] + '\\n' + text[at:]
+    return text
+
+
+def link_links(text):
+    lines = text.split('\n')
+    for line_i, line in enumerate(lines):
+        if 'http' in line:
+            words = [
+                f"<a href={i} target='_blank'>{i}</a>"
+                if i.startswith('http')
+                else i
+                for i in line.split(' ')
+            ]
+            lines[line_i] = ' '.join(words)
+    return '\n'.join(lines)
+
+
+def html_filename(asset):
+    fn = asset.get('name', asset['id']).replace('/', '-')
+    return 'asset_reports/' + '_'.join(fn.split()) + '.html'
+
+
+def report_to_html(asset, tooltip):
+    fn = html_filename(asset)
+    with open(f"{fn}", 'w') as rep:
+        rep.write(
+            f"<html><head><title>{asset.get('name')}</title></head><body>"
+        )
+        rep.write(f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>")
+        rep.write(link_links('\n'.join(tooltip)))
+        rep.write("</pre></body></html>")
+
+
 def assets_to_dot(assets, issues):
     other = {i['id']: i for i in assets}
     ans = [
@@ -296,15 +374,19 @@ def assets_to_dot(assets, issues):
         for k, v in asset.items():
             if isinstance(v, str) and not k.startswith('_'):
                 tooltip.append(f"{k}: {v}")
-        # put tags in tooltip
-        for tag in asset.get('tags', []):
-            tooltip.append(f"TAG {tag}")
+        # put tags etc. in tooltip
+        for list_field in 'tags', 'open_issues', 'closed_issues':
+            if asset.get(list_field):
+                tooltip.append(list_field.upper())
+                for item in asset.get(list_field, []):
+                    tooltip.append(f"  {item}")
         # include path to asset def. file in tooltip
         tooltip.append(f"Defined in {asset['file_data']['file_path']}")
         # dict of dot / graphviz node attributes
         attr = dict(
-            label=asset.get('name'),
-            URL=f"./asset_reports/n{asset['_node_id']}.html",
+            label=dot_node_name(asset.get('name')),
+            URL=html_filename(asset),
+            target=f"_{asset['id']}",
         )
         # `style` is compound 'shape=box, color=cyan', so key is None
         attr[None] = (ASSET_TYPE[asset["type"]].style,)
@@ -315,10 +397,7 @@ def assets_to_dot(assets, issues):
                 attr['style'] = 'filled'
                 attr['fillcolor'] = 'pink'
         # write tooltip to validation HTML page for copy / paste etc.
-        with open(f"asset_reports/n{asset['_node_id']}.html", 'w') as rep:
-            rep.write(f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>")
-            rep.write('\n'.join(tooltip))
-            rep.write("</pre>")
+        report_to_html(asset, tooltip)
         # tooltip dict -> text
         attr['tooltip'] = '\\n'.join(tooltip)
 
