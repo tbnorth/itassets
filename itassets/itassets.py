@@ -20,7 +20,7 @@ ASSET_TYPE = {
         "shape=oval, width=1.5",
         'green',
         ['top'],
-        ['owner'],
+        ['location', 'owner'],
         [],
         'app',
     ),
@@ -50,7 +50,7 @@ ASSET_TYPE = {
         ['bottom'],
         ['location'],
         [],
-        'img',
+        'dok',
     ),
     'physical/server': AT(
         "A real physical server",
@@ -64,7 +64,7 @@ ASSET_TYPE = {
     'physical/server/service': AT(
         "A service (web-server, RDMS) running directly"
         " on a physical server",
-        'shape=octagon, width=1.5',
+        'shape=octagon, width=1.25',
         'pink',
         [],
         [],
@@ -101,6 +101,8 @@ ASSET_TYPE = {
 }
 
 ID_PREFIX = {v.prefix: v.description for v in ASSET_TYPE.values()}
+# fields treated as lists on report output
+LIST_FIELDS = 'notes', 'tags', 'links', 'open_issues', 'closed_issues'
 
 VALIDATORS = defaultdict(lambda: [])
 VALIDATORS_COMPILED = {}
@@ -342,14 +344,7 @@ def report_to_html(asset, tooltip):
         rep.write("</pre></body></html>")
 
 
-def assets_to_dot(assets, issues):
-    other = {i['id']: i for i in assets}
-    ans = [
-        "digraph Assets {",
-        "  graph [rankdir=LR, concentrate=true]",
-        "  node [fontname=Arial, fontsize=10]",
-    ]
-    os.makedirs("asset_reports", exist_ok=True)
+def add_missing_deps(assets, other, ans):
     for asset in assets:
         real_deps = [
             i for i in asset.get('depends_on', []) if not i.startswith('^')
@@ -363,6 +358,17 @@ def assets_to_dot(assets, issues):
                 # used just to display missing asset on graph plot
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
 
+
+def assets_to_dot(assets, issues):
+    other = {i['id']: i for i in assets}
+    ans = [
+        "digraph Assets {",
+        "  graph [rankdir=LR, concentrate=true]",
+        "  node [fontname=Arial, fontsize=10]",
+    ]
+    add_missing_deps(assets, other, ans)
+    os.makedirs("asset_reports", exist_ok=True)
+
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
@@ -375,7 +381,7 @@ def assets_to_dot(assets, issues):
             if isinstance(v, str) and not k.startswith('_'):
                 tooltip.append(f"{k}: {v}")
         # put tags etc. in tooltip
-        for list_field in 'tags', 'open_issues', 'closed_issues':
+        for list_field in LIST_FIELDS:
             if asset.get(list_field):
                 tooltip.append(list_field.upper())
                 for item in asset.get(list_field, []):
