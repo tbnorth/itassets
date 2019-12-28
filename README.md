@@ -21,3 +21,28 @@ for those cases, the `^<pattern>` syntax can be used to skip any dependency.
 For applications this is typically the URL of the app.  For storage, this is
 usually `machine.some.tld:/some/path/to/local/storage` or `GoogleDrive:...`
 etc.
+
+## Open asset definition in editor from browser
+
+[`open-itas.sh`](./itassets/open-itas.sh) can be used to open an asset definition
+from the `edit` link at the bottom of the asset's info. page.  The link has a
+structure like `itas:///some/path/to/assets_file.yaml#some_asset_id`.  To
+install `open-itas.sh` using
+[xdg-open](https://www.freedesktop.org/wiki/Software/xdg-utils/) write a
+`.desktop` file like this:
+```
+[Desktop Entry]
+Type=Application
+Name=ITAS Scheme Handler
+Exec=/home/tbrown/bin/open-itas.sh %u
+StartupNotify=false
+MimeType=x-scheme-handler/itas;
+```
+and put it somewhere like `~/.local/share/applications/itas.desktop`.  Then
+tell the xdg system about it wit a command like:
+```shell
+xdg-mime default itas.desktop x-scheme-handler/itas   
+```
+`open-itas.sh` opens the definition in a running instance of vim, but could be
+modified for other editors.
+

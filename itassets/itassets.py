@@ -341,6 +341,10 @@ def report_to_html(asset, tooltip):
         )
         rep.write(f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>")
         rep.write(link_links('\n'.join(tooltip)))
+        rep.write(
+            f"\n<a href='itas://{asset['file_data']['file_path']}"
+            f"#{asset['id']}'>edit</a>\n"
+        )
         rep.write("</pre></body></html>")
 
 
