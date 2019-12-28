@@ -22,6 +22,27 @@ For applications this is typically the URL of the app.  For storage, this is
 usually `machine.some.tld:/some/path/to/local/storage` or `GoogleDrive:...`
 etc.
 
+### List fields
+
+The fields listed in the LIST_FIELDS list, currently
+```python
+LIST_FIELDS = 'notes', 'tags', 'links', 'open_issues', 'closed_issues'
+```
+get special handling, so
+```yaml
+tags:
+ - a_tag
+ - other_tag
+```
+is shown as 
+```
+TAGS
+  a_tag
+  other_tag
+```
+in the asset's report page.  Unknown fields with list or dict types aren't
+shown in the report.   
+
 ## Open asset definition in editor from browser
 
 [`open-itas.sh`](./itassets/open-itas.sh) can be used to open an asset definition
