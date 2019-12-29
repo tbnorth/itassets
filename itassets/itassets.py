@@ -24,6 +24,15 @@ ASSET_TYPE = {
         [],
         'app',
     ),
+    'cloud/service': AT(
+        "A service (web-server, RDMS) running in the cloud",
+        'shape=polygon, width=1.25, sides=9',
+        'pink',
+        [],
+        ['location'],
+        [],
+        'csvc',
+    ),
     'container/docker': AT(
         "A docker container (image instance)",
         'shape="box3d", width=1.5',
