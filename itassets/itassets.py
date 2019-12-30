@@ -342,6 +342,12 @@ def html_filename(asset):
     return 'asset_reports/' + '_'.join(fn.split()) + '.html'
 
 
+def edit_url(asset):
+    if not asset.get('file_data'):
+        return None  # a node for an undefined dependency
+    return f"itas://{asset['file_data']['file_path']}#{asset['id']}"
+
+
 def report_to_html(asset, tooltip):
     fn = html_filename(asset)
     with open(f"{fn}", 'w') as rep:
@@ -350,10 +356,7 @@ def report_to_html(asset, tooltip):
         )
         rep.write(f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>")
         rep.write(link_links('\n'.join(tooltip)))
-        rep.write(
-            f"\n<a href='itas://{asset['file_data']['file_path']}"
-            f"#{asset['id']}'>edit</a>\n"
-        )
+        rep.write(f"\n<a href='{edit_url(asset)}'>edit</a>\n")
         rep.write("</pre></body></html>")
 
 
@@ -425,7 +428,25 @@ def assets_to_dot(assets, issues):
 
         # write links to graphviz file
         for dep in real_deps:
-            ans.append(f"  {other[dep]['_node_id']} -> {asset['_node_id']}")
+            attr = dict(
+                fontcolor='#ffffff00',
+                headURL=edit_url(asset),
+                headlabel='edit',
+                headtooltop='Edit',
+            )
+            if edit_url(other[dep]):  # i.e. not an undefined dependency
+                attr.update(
+                    dict(
+                        tailURL=edit_url(other[dep]),
+                        taillabel='edit',
+                        tailtooltop='Edit',
+                    )
+                )
+            edge_attr = node_dot('x', attr).split(None, 1)[-1]
+            ans.append(
+                f"  {other[dep]['_node_id']} -> {asset['_node_id']}"
+                f"{edge_attr}"
+            )
 
     ans.append('}')
     return '\n'.join(ans)
