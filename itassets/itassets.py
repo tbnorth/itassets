@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+import time
 from collections import defaultdict, namedtuple
 from itertools import chain
 
@@ -33,7 +34,7 @@ ASSET_TYPE = {
         'pink',
         [],
         ['location'],
-        [],
+        ['resource/deployment'],
         'csvc',
     ),
     'container/docker': AT(
@@ -42,8 +43,11 @@ ASSET_TYPE = {
         'green',
         [],
         [],
-        # FIXME: allow 'physical/server' OR 'cloud/server' using re maybe
-        ['resource/deployment', 'physical/server', 'storage/.*'],
+        [
+            'resource/deployment',
+            '(physical/server|cloud/service)',
+            'storage/.*',
+        ],
         'con',
     ),
     'drive': AT(
@@ -280,6 +284,16 @@ def load_assets(asset_file):
     return file_data['assets']
 
 
+def general_info(assets):
+    """Search the assets for a general section"""
+    for asset in assets:
+        try:
+            return asset['file_data']['general']
+        except KeyError:
+            pass
+    return None
+
+
 def validate_assets(assets):
     seen = {}
     dependents = defaultdict(lambda: [])
@@ -414,12 +428,22 @@ def asset_dep_ids(asset, insufficient=False):
     ]
 
 
+def get_title(assets):
+    ttl = general_info(assets)
+    if ttl:
+        ttl = ttl['title']
+    else:
+        ttl = ''
+    return f"{ttl} updated {time.asctime()}"
+
+
 def assets_to_dot(assets, issues):
     other = {i['id']: i for i in assets}
     ans = [
         "digraph Assets {",
-        "  graph [rankdir=LR, concentrate=true]",
-        "  node [fontname=Arial, fontsize=10]",
+        '  graph [rankdir=LR, concentrate=true, URL="index.html"'
+        f'       label="{get_title(assets)}", fontname=FreeSans, tooltip=" "]',
+        "  node [fontname=FreeSans, fontsize=10]",
     ]
     add_missing_deps(assets, other, ans)
     os.makedirs("asset_reports", exist_ok=True)

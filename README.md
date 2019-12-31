@@ -4,6 +4,19 @@ Simply YAML parsing code to report of DB of IT assets.
 
 DB is simply a collection of YAML files describing assets.
 
+## Running from a Docker container
+
+```shell
+docker run -it --rm \
+  -v /some/path/to/assets:/inputs \
+  -v /some/path/to/outputs:/outputs \
+  itassets
+```
+will read all the `.yaml` files in `/some/path/to/assets` and write outputs to
+`/some/path/to/outputs`.
+
+FIXME: push image to Docker Hub
+
 ## Special conventions
 
 ### Archived tag
