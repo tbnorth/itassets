@@ -17,11 +17,14 @@ AT = namedtuple(
 ASSET_TYPE = {
     'application': AT(
         '"Terminal" asset type, that users use',
-        "shape=oval, width=1.5",
+        "shape=oval, width=1.5, rank=max",
         'green',
         ['top'],
         ['location', 'owner'],
-        [],
+        [
+            '(cloud/service|container/.*|'
+            'physical/server/service$|website/static)'
+        ],
         'app',
     ),
     'cloud/service': AT(
@@ -40,7 +43,7 @@ ASSET_TYPE = {
         [],
         [],
         # FIXME: allow 'physical/server' OR 'cloud/server' using re maybe
-        ['image/docker', 'physical/server', 'storage/.*'],
+        ['resource/deployment', 'physical/server', 'storage/.*'],
         'con',
     ),
     'drive': AT(
@@ -52,14 +55,15 @@ ASSET_TYPE = {
         ['physical/server'],
         'drv',
     ),
-    'image/docker': AT(
-        "The source (Dockerfile) for a Docker image",
+    'resource/deployment': AT(
+        "The source / deplpoyment resource for an asset, "
+        "e.g. the Dockerfile for a Docker image",
         'shape=note, width=1.5',
         'cyan',
         ['bottom'],
         ['location'],
         [],
-        'dok',
+        'dply',
     ),
     'physical/server': AT(
         "A real physical server",
@@ -73,11 +77,21 @@ ASSET_TYPE = {
     'physical/server/service': AT(
         "A service (web-server, RDMS) running directly"
         " on a physical server",
+        'shape=pentagon, width=1.25',
+        'pink',
+        [],
+        [],
+        ['physical/server', 'resource/deployment', 'storage/.*'],
+        'psvc',
+    ),
+    'physical/server/service/infrastructure': AT(
+        "A service (web-server, RDMS) running directly"
+        " on a physical server",
         'shape=octagon, width=1.25',
         'pink',
         [],
         [],
-        ['physical/server'],
+        ['physical/server', 'resource/deployment', 'storage/.*'],
         'psvc',
     ),
     'vm/virtualbox': AT(
@@ -107,11 +121,27 @@ ASSET_TYPE = {
         [],
         'bak',
     ),
+    'website/static': AT(
+        "A static website, may include javascript",
+        'shape=trapezium,width=1.5',
+        'white',
+        [],
+        ['location'],
+        ['resource/deployment', 'storage/.*', 'physical/server/service'],
+        'wss',
+    ),
 }
 
 ID_PREFIX = {v.prefix: v.description for v in ASSET_TYPE.values()}
 # fields treated as lists on report output
-LIST_FIELDS = 'notes', 'tags', 'links', 'open_issues', 'closed_issues'
+LIST_FIELDS = (
+    'closed_issues',
+    'depends_on',
+    'links',
+    'notes',
+    'open_issues',
+    'tags',
+)
 
 VALIDATORS = defaultdict(lambda: [])
 VALIDATORS_COMPILED = {}
@@ -133,7 +163,7 @@ def known_asset_type(asset, lookup, dependents):
 
 @validator('.*')
 def no_undef_depends(asset, lookup, dependents):
-    for dep in asset.get('depends_on', []):
+    for dep in asset_dep_ids(asset):
         if dep not in lookup and not dep.startswith('^'):
             yield 'WARNING', f"Depends on undefined asset ID={dep}"
 
@@ -187,12 +217,12 @@ def check_fields(asset, lookup, dependents):
 def check_depends(asset, lookup, dependents):
     type_ = asset['type']
     for dep in ASSET_TYPE[type_].depends:
-        if '^' + dep in asset.get('depends_on', []):
+        if '^' + dep in asset_dep_ids(asset):
             yield 'NOTE', f"Specifically excludes '{dep}' dependency"
             continue
         if not any(
             re.search(dep, lookup.get(i, {'type': "NO-TYPE"})['type'])
-            for i in asset.get('depends_on', [])
+            for i in asset_dep_ids(asset, insufficient=True)
         ):
             yield 'WARNING', f"'{type_}' should define '{dep}' dependency"
 
@@ -244,6 +274,9 @@ def load_assets(asset_file):
     for asset in file_data.get('assets', []):
         asset['file_data'] = file_data
     file_data['file_path'] = os.path.abspath(asset_file)
+    file_data['assets'] = [
+        i for i in file_data['assets'] if 'archived' not in i.get('tags', [])
+    ]
     return file_data['assets']
 
 
@@ -264,7 +297,7 @@ def validate_assets(assets):
             print(f"       Duplicated in {asset['file_data']['file_path']}")
         else:
             seen[id_] = asset
-        for dep in asset.get('depends_on', []):
+        for dep in asset_dep_ids(asset):
             dependents[dep].append(id_)
     if duplicate_IDs:
         raise Exception("Can't continue with duplicate IDs present")
@@ -326,10 +359,10 @@ def dot_node_name(text):
 def link_links(text):
     lines = text.split('\n')
     for line_i, line in enumerate(lines):
-        if 'http' in line:
+        if re.search(r'\w+://', line):
             words = [
                 f"<a href={i} target='_blank'>{i}</a>"
-                if i.startswith('http')
+                if re.match(r'\w+://', i)
                 else i
                 for i in line.split(' ')
             ]
@@ -362,9 +395,7 @@ def report_to_html(asset, tooltip):
 
 def add_missing_deps(assets, other, ans):
     for asset in assets:
-        real_deps = [
-            i for i in asset.get('depends_on', []) if not i.startswith('^')
-        ]
+        real_deps = [i for i in asset_dep_ids(asset) if not i.startswith('^')]
         for dep in real_deps:
             if dep not in other:
                 ans.append(
@@ -373,6 +404,14 @@ def add_missing_deps(assets, other, ans):
                 )
                 # used just to display missing asset on graph plot
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
+
+
+def asset_dep_ids(asset, insufficient=False):
+    return [
+        i.split()[0]
+        for i in asset.get('depends_on', [])
+        if (not insufficient or 'INSUF' not in i)
+    ]
 
 
 def assets_to_dot(assets, issues):
@@ -388,9 +427,7 @@ def assets_to_dot(assets, issues):
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
-        real_deps = [
-            i for i in asset.get('depends_on', []) if not i.startswith('^')
-        ]
+        real_deps = [i for i in asset_dep_ids(asset) if not i.startswith('^')]
         tooltip = []
         # put asset attributes in tooltip
         for k, v in asset.items():
