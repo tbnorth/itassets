@@ -471,6 +471,8 @@ def assets_to_dot(assets, issues):
             URL=html_filename(asset),
             target=f"_{asset['id']}",
         )
+        if False:  # used to generate demo output
+            attr['label'] = asset['type'].split('/')[-1]
         # `style` is compound 'shape=box, color=cyan', so key is None
         attr[None] = (ASSET_TYPE[asset["type"]].style,)
         # add validation issues to top of tooltip

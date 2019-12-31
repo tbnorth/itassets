@@ -1,21 +1,61 @@
 # IT Assets
 
-Simply YAML parsing code to report of DB of IT assets.
+Code to validate and graphically map a database of IT assets.
 
-DB is simply a collection of YAML files describing assets.
+The database is simply a collection of YAML files describing assets.  Asset
+types include `application`, `cloud/service`, `container/docker`,
+`resource/deployment`, `physical/server`, `backup` etc.  Relationships are
+validated, for example `container/docker` should define a dependency on an
+asset of type `resource/deployment`, typically linking to the Dockerfile and
+other resources needed to create the image.  Similarly a `storage/local` asset
+should define dependencies on `drive` and `backup` assets.
 
-## Running from a Docker container
+Nodes below have their regular names replaced with the name of their type for
+illustration, node names are more usually "Geoserver for bicycle app." etc.
+
+![Example image](./img/assets.png)
+
+Colors indicate validation failures or the presence of a `needs_work` tag.
+Hovering over a node display attributes and validation issues.  Clicking on a
+node opens a page reporting asset details, where links to external resources
+are active.
+
+An asset definition looks like:
+```yaml
+id: con_geoserver_bike
+name: Bicycle app. GeoServer
+description: GeoServer docker container for cycling app.
+type: container/docker
+depends_on:
+ - srv_bigbox2 the server the container's running on
+ - psvc_bb_apache /etc/apache/sites-enabled/010-bike_app
+ - dply_geoserv_bike a link to the Dockerfile / compose / deploy repo. to make container
+ - sto_store1_usr1 a link to a local storage definition
+tags:
+ - needs_work
+ - archived
+ - migrate_to_cloud
+notes:
+ - check with Alexis if this is still needed
+open_issues:
+ - separate defs from main code https://github.com/tbnorth/itassets/issues/1
+closed_issues:
+ - some other issue https://github.com/tbnorth/itassets/issues/11
+ - etc. etc. https://github.com/tbnorth/itassets/issues/111
+```
+The first word (`srv_bigbox2` etc.) in the `depends_on` list is the linking ID
+field, the remainder of the line is additional information.
+
+## Running in a Docker container
 
 ```shell
 docker run -it --rm \
   -v /some/path/to/assets:/inputs \
   -v /some/path/to/outputs:/outputs \
-  itassets
+  tbnorth/itassets:latest
 ```
 will read all the `.yaml` files in `/some/path/to/assets` and write outputs to
 `/some/path/to/outputs`.
-
-FIXME: push image to Docker Hub
 
 ## Special conventions
 
