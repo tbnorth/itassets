@@ -454,9 +454,13 @@ def assets_to_dot(assets, issues):
         real_deps = [i for i in asset_dep_ids(asset) if not i.startswith('^')]
         tooltip = []
         # put asset attributes in tooltip
-        for k, v in asset.items():
-            if isinstance(v, str) and not k.startswith('_'):
-                tooltip.append(f"{k}: {v}")
+        tooltip.extend(
+            [
+                f"{k}: {v}"
+                for k, v in asset.items()
+                if isinstance(v, str) and not k.startswith('_')
+            ]
+        )
         # put tags etc. in tooltip
         for list_field in LIST_FIELDS:
             if asset.get(list_field):

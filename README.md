@@ -18,13 +18,17 @@ illustration, node names are more usually "Geoserver for bicycle app." etc.
 Colors indicate validation failures or the presence of a `needs_work` tag.
 Hovering over a node display attributes and validation issues.  Clicking on a
 node opens a page reporting asset details, where links to external resources
-are active.
+are active.  Nodes and report pages include
+`itas:///path/to/file.yaml#con_asset_id` links which can be used to [link your
+favorite editor to the web view](#open-asset-definition-in-editor-from-browser).
 
 An asset definition looks like:
 ```yaml
 id: con_geoserver_bike
 name: Bicycle app. GeoServer
 description: GeoServer docker container for cycling app.
+owner: Terry Brown <terrynbrown@gmail.com>
+location: https://github.com/tbnorth/itassets
 type: container/docker
 depends_on:
  - srv_bigbox2 the server the container's running on
@@ -56,6 +60,22 @@ docker run -it --rm \
 ```
 will read all the `.yaml` files in `/some/path/to/assets` and write outputs to
 `/some/path/to/outputs`.
+
+## Running from the command line
+
+`itassets` requires [pyyaml](https://pyyaml.org/wiki/PyYAMLDocumentation) and
+[graphviz - dot](https://www.graphviz.org/).  An example command line
+invocation:
+```shell
+python3 itassets.py --assets ./some/path/*.yaml
+# creates assets.dot and asset_reports folder
+dot -Tpng -oassets.png -Tcmapx -oassets.map assets.dot
+# creates assets.png and assets.map
+cat docker/head.html assets.map docker/tail.html >index.html
+```
+then view index.html in your browser.  [docker/head.html](./docker/head.html)
+and [docker/tail.html](./docker/tail.html) are just minimal HTML snippets to
+apply the image link map to the image.
 
 ## Special conventions
 
