@@ -28,6 +28,15 @@ ASSET_TYPE = {
         ],
         'app',
     ),
+    'backup': AT(
+        "A backup solution",
+        'shape=component, width=1.5',
+        'white',
+        [],
+        ['location'],
+        [],
+        'bak',
+    ),
     'cloud/service': AT(
         "A service (web-server, RDMS) running in the cloud",
         'shape=polygon, width=1.25, sides=9',
@@ -59,16 +68,6 @@ ASSET_TYPE = {
         ['physical/server'],
         'drv',
     ),
-    'resource/deployment': AT(
-        "The source / deplpoyment resource for an asset, "
-        "e.g. the Dockerfile for a Docker image",
-        'shape=note, width=1.5',
-        'cyan',
-        ['bottom'],
-        ['location'],
-        [],
-        'dply',
-    ),
     'physical/server': AT(
         "A real physical server",
         'shape=box, width=1',
@@ -98,14 +97,15 @@ ASSET_TYPE = {
         ['physical/server', 'resource/deployment', 'storage/.*'],
         'psvc',
     ),
-    'vm/virtualbox': AT(
-        "A VirtualBox VM",
-        'shape=box, peripheries="2", width=1.4',
-        'pink',
+    'resource/deployment': AT(
+        "The source / deplpoyment resource for an asset, "
+        "e.g. the Dockerfile for a Docker image",
+        'shape=note, width=1.5',
+        'cyan',
+        ['bottom'],
+        ['location'],
         [],
-        [],
-        ['physical/server', 'storage/.*'],
-        'vbx',
+        'dply',
     ),
     'storage/local': AT(
         "A local storage solutions, requires backup",
@@ -116,18 +116,18 @@ ASSET_TYPE = {
         ['backup', 'drive'],
         'sto',
     ),
-    'backup': AT(
-        "A backup solution",
-        'shape=Msquare,width=1.5',
-        'white',
+    'vm/virtualbox': AT(
+        "A VirtualBox VM",
+        'shape=box, peripheries="2", width=1.4',
+        'pink',
         [],
-        ['location'],
         [],
-        'bak',
+        ['physical/server', 'storage/.*'],
+        'vbx',
     ),
     'website/static': AT(
         "A static website, may include javascript",
-        'shape=trapezium,width=1.5',
+        'shape=tab,width=1',
         'white',
         [],
         ['location'],
@@ -148,7 +148,7 @@ LIST_FIELDS = (
 )
 
 VALIDATORS = defaultdict(lambda: [])
-VALIDATORS_COMPILED = {}
+VALIDATORS_COMPILED = {}  # updated in main()
 
 
 def validator(type_):
@@ -301,33 +301,34 @@ def validate_assets(assets):
     # check for duplicate IDs, dependents
     duplicate_IDs = False
     for asset in assets:
-        id_ = asset['id']
-        if id_ in seen:
-            duplicate_IDs = True
-            print(f"ERROR: {id_} already seen")
-            print(
-                f"       First used in {seen[id_]['file_data']['file_path']}"
-            )
-            print(f"       Duplicated in {asset['file_data']['file_path']}")
-        else:
-            seen[id_] = asset
-        for dep in asset_dep_ids(asset):
-            dependents[dep].append(id_)
+        try:
+            id_ = asset['id']
+            if id_ in seen:
+                duplicate_IDs = True
+                print(f"ERROR: {id_} already seen")
+                print(f"  First used in {seen[id_]['file_data']['file_path']}")
+                print(f"  Duplicated in {asset['file_data']['file_path']}")
+            else:
+                seen[id_] = asset
+            for dep in asset_dep_ids(asset):
+                dependents[dep].append(id_)
+        except Exception:
+            print(f"Failed validating {asset}")
     if duplicate_IDs:
         raise Exception("Can't continue with duplicate IDs present")
 
-    # check all depends_on IDs are defined, ID prefixes recognized
-    if not VALIDATORS_COMPILED:
-        VALIDATORS_COMPILED.update(
-            {re.compile(k): v for k, v in VALIDATORS.items()}
-        )
     for asset in assets:
-        issues = []
+        issues = [('UNKNOWN', 'FAILURE')]
+        # Having something on this list makes sure the finally clause prints
+        # something to incriminate the failing asset if there's an exception
+        # before anything's added to issues.
         try:
             for pattern, validators in VALIDATORS_COMPILED.items():
                 if pattern.search(asset.get('type', 'NOT-SPECIFIED')):
                     for validator in validators:
                         issues.extend(list(validator(asset, seen, dependents)))
+            assert issues[0] == ('UNKNOWN', 'FAILURE')
+            del issues[0]  # remove this, see comment above
         finally:
             if issues:
                 failures[asset['id']] = issues
@@ -439,11 +440,13 @@ def get_title(assets):
 
 def assets_to_dot(assets, issues):
     other = {i['id']: i for i in assets}
+    edit_linked = set()
     ans = [
         "digraph Assets {",
         '  graph [rankdir=LR, concentrate=true, URL="index.html"'
         f'       label="{get_title(assets)}", fontname=FreeSans, tooltip=" "]',
         "  node [fontname=FreeSans, fontsize=10]",
+        "  edge [fontname=FreeSans, fontsize=10]",
     ]
     add_missing_deps(assets, other, ans)
     os.makedirs("asset_reports", exist_ok=True)
@@ -493,20 +496,26 @@ def assets_to_dot(assets, issues):
         # write node to graphviz file
         ans.append(node_dot(asset['_node_id'], attr))
 
-        # write links to graphviz file
+        # write links to graphviz file, FROM dep TO asset
         for dep in real_deps:
-            attr = dict(
-                fontcolor='#ffffff00',
-                headURL=edit_url(asset),
-                headlabel='edit',
-                headtooltop='Edit',
-            )
-            if edit_url(other[dep]):  # i.e. not an undefined dependency
+            attr = dict(fontcolor='#00000040')
+            if asset['id'] not in edit_linked:
+                edit_linked.add(asset['id'])
+                attr.update(
+                    dict(
+                        headURL=edit_url(asset),
+                        headlabel='edit',
+                        headtooltip='Edit',
+                    )
+                )
+            if edit_url(other[dep]) and dep not in edit_linked:
+                # i.e. not an undefined dependency
+                edit_linked.add(dep)
                 attr.update(
                     dict(
                         tailURL=edit_url(other[dep]),
                         taillabel='edit',
-                        tailtooltop='Edit',
+                        tailtooltip='Edit',
                     )
                 )
             edge_attr = node_dot('x', attr).split(None, 1)[-1]
@@ -523,7 +532,15 @@ def main():
     opt = get_options()
     assets = []
     for asset_file in chain.from_iterable(opt.assets):
-        assets.extend(load_assets(asset_file))
+        try:
+            assets.extend(load_assets(asset_file))
+        except Exception:
+            print(f"Failed reading {asset_file}")
+            raise
+
+    VALIDATORS_COMPILED.update(
+        {re.compile(k): v for k, v in VALIDATORS.items()}
+    )
     issues = validate_assets(assets)
     with open("assets.dot", 'w') as out:
         out.write(assets_to_dot(assets, issues))
