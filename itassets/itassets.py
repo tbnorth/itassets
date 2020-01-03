@@ -23,7 +23,7 @@ ASSET_TYPE = {
         ['top'],
         ['location', 'owner'],
         [
-            '(cloud/service|container/.*|'
+            '(cloud/service|container/.*|vm/virtualbox|'
             'physical/server/service$|website/static)'
         ],
         'app',
@@ -58,6 +58,16 @@ ASSET_TYPE = {
             'storage/.*',
         ],
         'con',
+    ),
+    'database': AT(
+        "A database on a server",
+        "shape=house",
+        "white",
+        [],
+        [],
+        ['(cloud/service|container/.*|vm/virtualbox|'
+         'physical/server/service$)', 'backup'],
+        'db_',
     ),
     'drive': AT(
         "A physical drive",
@@ -214,7 +224,7 @@ def check_fields(asset, lookup, dependents):
     type_ = asset['type']
     for field in ASSET_TYPE[type_].fields:
         if not asset.get(field):
-            yield 'WARNING', f"'{type_} definition missing '{field}' field"
+            yield 'WARNING', f"'{type_}' definition missing '{field}' field"
 
 
 @validator('.*')
