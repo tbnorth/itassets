@@ -1,0 +1,11 @@
+{% extends "index.html" %}
+{% block content %}{{super()}}
+{% for store in storage %}
+<div class='storage'>
+<div><code>{{store.location}}</code></div>
+<div><span class='{{store._class}}'>{{store.name}}</span> {{store.description}}
+[<a target="_def_{{store.id}}" href="{{top}}{{store._reppath}}">definition</a>]
+</div>
+</div>
+{% endfor %}
+{% endblock %}

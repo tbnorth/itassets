@@ -5,6 +5,7 @@ import time
 from collections import defaultdict, namedtuple
 from itertools import chain
 
+import jinja2
 import yaml
 
 AT = namedtuple(
@@ -65,8 +66,11 @@ ASSET_TYPE = {
         "white",
         [],
         [],
-        ['(cloud/service|container/.*|vm/virtualbox|'
-         'physical/server/service$)', 'backup'],
+        [
+            '(cloud/service|container/.*|vm/virtualbox|'
+            'physical/server/service$)',
+            'backup',
+        ],
         'db_',
     ),
     'drive': AT(
@@ -448,13 +452,13 @@ def get_title(assets):
     return f"{ttl} updated {time.asctime()}"
 
 
-def assets_to_dot(assets, issues):
+def assets_to_dot(assets, issues, title):
     other = {i['id']: i for i in assets}
     edit_linked = set()
     ans = [
         "digraph Assets {",
         '  graph [rankdir=LR, concentrate=true, URL="index.html"'
-        f'       label="{get_title(assets)}", fontname=FreeSans, tooltip=" "]',
+        f'       label="{title}", fontname=FreeSans, tooltip=" "]',
         "  node [fontname=FreeSans, fontsize=10]",
         "  edge [fontname=FreeSans, fontsize=10]",
     ]
@@ -538,6 +542,40 @@ def assets_to_dot(assets, issues):
     return '\n'.join(ans)
 
 
+def write_reports(assets, issues, title):
+    path = os.path.join(os.path.dirname(__file__), 'templates')
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader([path]))
+    generated = title.split(' updated ')[-1]
+    applications = [i for i in assets if i['type'] == 'application']
+    storage = [i for i in assets if i['type'].startswith('storage/')]
+    applications.sort(key=lambda x: x['name'])
+    storage.sort(key=lambda x: x['name'])
+    for asset in assets:
+        asset['_reppath'] = html_filename(asset)
+        if asset['id'] in issues:
+            asset['_class'] = 'issues'
+    asset_types = []
+    for key, asset in ASSET_TYPE.items():
+        asset_types.append(asset._asdict())
+        asset_types[-1]['id'] = key
+    context = dict(
+        title=title,
+        imap=open("assets.map").read(),
+        generated=generated,
+        top='./',
+        applications=applications,
+        storage=storage,
+        asset_types=asset_types,
+    )
+    with open("index.html", 'w') as out:
+        out.write(env.get_template("map.html").render(context))
+
+    context['top'] = '../'
+    for rep in 'asset_types', 'storage', 'applications':
+        with open(f"asset_reports/_{rep}.html", 'w') as out:
+            out.write(env.get_template(f"{rep}.html").render(context))
+
+
 def main():
     opt = get_options()
     assets = []
@@ -552,8 +590,12 @@ def main():
         {re.compile(k): v for k, v in VALIDATORS.items()}
     )
     issues = validate_assets(assets)
+    title = get_title(assets)
     with open("assets.dot", 'w') as out:
-        out.write(assets_to_dot(assets, issues))
+        out.write(assets_to_dot(assets, issues, title))
+
+    os.system("dot -Tpng -oassets.png -Tcmapx -oassets.map assets.dot")
+    write_reports(assets, issues, title)
 
 
 if __name__ == "__main__":

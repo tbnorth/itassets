@@ -1,0 +1,8 @@
+{% extends "index.html" %}
+{% block content %}{{super()}}
+<img src="assets.png" usemap="#mainmap" />
+<map id="mainmap" name="mainmap">
+{{imap}}        
+</map>
+{% endblock %}
+

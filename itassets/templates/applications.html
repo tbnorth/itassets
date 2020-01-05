@@ -1,0 +1,17 @@
+{% extends "index.html" %}
+{% block content %}{{super()}}
+<p>A <span class='issues'>colored heading</span> only indicates issues
+with the application's own asset definition, a non-colored heading doesn't
+mean there are no issues with the application's dependencies, check
+<a href="{{top}}index.html">the map</a>.
+{% for app in applications %}
+<div class='asset'>
+<h3><span class='{{app._class}}'>{{app.name}}</span></h3>        
+<div>{{app.description}}</div>
+<div>
+[<a target="_{{app.id}}" href="{{app.location}}">link</a>]
+[<a target="_def_{{app.id}}" href="{{top}}{{app._reppath}}">definition</a>]
+</div>
+</div>
+{% endfor %}
+{% endblock %}

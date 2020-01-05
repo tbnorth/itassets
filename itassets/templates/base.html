@@ -1,0 +1,28 @@
+<html>
+<head>
+<title>{{title}}</title>
+<style>
+* {
+  font-family: sans-serif;
+  }        
+pre, code {
+  font-family: monospace;
+  font-size: 125%;
+  }        
+.footer {
+  margin-top: 1em;
+  }
+.issues {
+  background: pink;        
+  }
+.storage {
+  margin-bottom: 0.5em;
+  }
+</style>
+</head>
+<body>
+{% block content %}
+{% endblock %}
+<div class="footer">Generated: {{generated}}</div>
+</body>
+</html>
