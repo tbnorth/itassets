@@ -372,7 +372,7 @@ def propagate_dependent_types(assets):
 
     def add_types(asset, type_, lookup):
         asset.setdefault('_dependent_types', set()).add(type_)
-        for depend in asset.get('depends_on', []):
+        for depend in asset_dep_ids(asset):
             if depend in lookup:
                 add_types(lookup[depend], type_, lookup)
 
@@ -436,10 +436,13 @@ def edit_url(asset):
 
 
 def report_to_html(asset, tooltip, write=True):
+    type_ = asset['type']
     report = [
         f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>",
         link_links('\n'.join(tooltip)),
-        f"\n<a href='{edit_url(asset)}'>edit</a>\n",
+        f"\n<a href='{edit_url(asset)}'>edit</a> ",
+        f"<a href='_{type_.replace('/', '_')}.html'>"
+        f"see all {type_} assets</a>\n",
         "</pre>",
     ]
     if write:
@@ -508,12 +511,12 @@ def get_tooltip(asset, issues):
     return tooltip
 
 
-def assets_to_dot(assets, issues, title):
+def assets_to_dot(assets, issues, title, top):
     other = {i['id']: i for i in assets}
     edit_linked = set()
     ans = [
         "digraph Assets {",
-        '  graph [rankdir=LR, concentrate=true, URL="index.html"'
+        f'  graph [rankdir=LR, concentrate=true, URL="{top}index.html"'
         f'       label="{title}", fontname=FreeSans, tooltip=" "]',
         "  node [fontname=FreeSans, fontsize=10]",
         "  edge [fontname=FreeSans, fontsize=10]",
@@ -529,7 +532,7 @@ def assets_to_dot(assets, issues, title):
         # dict of dot / graphviz node attributes
         attr = dict(
             label=dot_node_name(asset.get('name')),
-            URL=html_filename(asset),
+            URL=top + html_filename(asset),
             target=f"_{asset['id']}",
         )
         if False:  # used to generate demo output
@@ -621,6 +624,75 @@ def write_reports(assets, issues, title, archived):
             out.write(env.get_template(f"{rep}.html").render(context))
 
 
+def write_maps(assets, issues, title):
+
+    write_map("index", assets, issues, title, ".*")
+    write_map(
+        "asset_reports/_unapplied",
+        assets,
+        issues,
+        title,
+        "application",
+        negate=True,
+    )
+    for type_ in ASSET_TYPE:
+        write_map(
+            "asset_reports/_" + type_.replace('/', '_'),
+            assets,
+            issues,
+            title,
+            type_,
+        )
+
+
+def write_map(base, assets, issues, title, leads_to, negate=False):
+
+    use = [
+        i
+        for i in assets
+        if any(
+            re.search(f'^{leads_to}$', j)
+            for j in (i.get('_dependent_types') or [])
+        )
+    ]
+    if negate:
+        lookup = {i['id']: i for i in assets}
+        use = [i for i in assets if i not in use]
+        old_len = None
+        while old_len != len(use):
+            for asset in list(use):
+                for dep in asset_dep_ids(asset):
+                    if dep in lookup and lookup[dep] not in use:
+                        use.append(lookup[dep])
+            print(f"Added {len(use)-(old_len or 0)}")
+            old_len = len(use)
+
+    print(f"Showing {len(use)} of {len(assets)} assets for {base}")
+
+    top = './' if base == 'index' else '../'
+    with open(base + ".dot", 'w') as out:
+        out.write(assets_to_dot(use, issues, title, top))
+    os.system(f"dot -Tpng -o{base}.png -Tcmapx -o{base}.map {base}.dot")
+
+    path = os.path.join(os.path.dirname(__file__), 'templates')
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader([path]))
+    generated = title.split(' updated ')[-1]
+    subset = 'All assets' if base == 'index' else f'{leads_to} assets only'
+    if negate:
+        subset = f"Assets not leading to an asset of type {leads_to}"
+
+    context = dict(
+        title=title,
+        imap=open(f"{base}.map").read(),
+        generated=generated,
+        top=top,
+        base=base,
+        subset=subset,
+    )
+    with open(f"{base}.html", 'w') as out:
+        out.write(env.get_template("map.html").render(context))
+
+
 def main():
     opt = get_options()
     assets = []
@@ -640,6 +712,7 @@ def main():
     )
     issues = validate_assets(assets)
     title = get_title(assets)
+    write_reports(assets, issues, title, archived)
 
     # add _dependent_types to each asset listing types of all dependents
     propagate_dependent_types(assets)
@@ -660,11 +733,7 @@ def main():
             assets = use
         print(f"Showing {len(assets)} of {n} assets")
 
-    with open("assets.dot", 'w') as out:
-        out.write(assets_to_dot(assets, issues, title))
-
-    os.system("dot -Tpng -oassets.png -Tcmapx -oassets.map assets.dot")
-    write_reports(assets, issues, title, archived)
+    write_maps(assets, issues, title)
 
 
 if __name__ == "__main__":
