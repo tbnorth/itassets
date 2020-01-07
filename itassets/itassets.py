@@ -259,6 +259,16 @@ def make_parser():
         help="One or more asset .yaml files to read",
         metavar="FILE",
     )
+    parser.add_argument(
+        "--leaf-type",
+        help="Trim map to stop at assets of this TYPE (regex match)",
+        metavar="TYPE",
+    )
+    parser.add_argument(
+        "--leaf-negate",
+        help="Trim map to show assets not leading to --leaf-type",
+        action='store_true',
+    )
 
     return parser
 
@@ -351,6 +361,23 @@ def validate_assets(assets):
                 print(f"    {type_}: {description}")
 
     return failures
+
+
+def propagate_dependent_types(assets):
+    """Add a `_dependent_types` set to all assets which lists the types of
+    assets dependent on this asset, to generate trimmed maps with --leaf-type.
+    """
+    # FIXME: catch circular dependencies
+    lookup = {i['id']: i for i in assets}
+
+    def add_types(asset, type_, lookup):
+        asset.setdefault('_dependent_types', set()).add(type_)
+        for depend in asset.get('depends_on', []):
+            if depend in lookup:
+                add_types(lookup[depend], type_, lookup)
+
+    for asset in assets:
+        add_types(asset, asset['type'], lookup)
 
 
 def node_dot(id_, attr):
@@ -613,12 +640,31 @@ def main():
     )
     issues = validate_assets(assets)
     title = get_title(assets)
+
+    # add _dependent_types to each asset listing types of all dependents
+    propagate_dependent_types(assets)
+
+    if opt.leaf_type:
+        n = len(assets)
+        use = [
+            i
+            for i in assets
+            if any(
+                re.search(opt.leaf_type, j)
+                for j in (i.get('_dependent_types') or [])
+            )
+        ]
+        if opt.leaf_negate:
+            assets = [i for i in assets if i not in use]
+        else:
+            assets = use
+        print(f"Showing {len(assets)} of {n} assets")
+
     with open("assets.dot", 'w') as out:
         out.write(assets_to_dot(assets, issues, title))
 
     os.system("dot -Tpng -oassets.png -Tcmapx -oassets.map assets.dot")
     write_reports(assets, issues, title, archived)
-    print(len(archived))
 
 
 if __name__ == "__main__":
