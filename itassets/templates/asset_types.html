@@ -1,7 +1,7 @@
 {% extends "index.html" %}
 {% block content %}{{super()}}
 {% for at in asset_types %}
-<h3>{{at.id}} ({{at.prefix}}_)</h3>
+<h3>{{at.id}} <span class="prefix">{{at.prefix}}_</span></h3>
 <p>{{at.description}}</p>
 <div>Depends on: <code>{{at.depends}}</code></div>
 <div>Required fields: <code>{{at.fields}}</code></div>

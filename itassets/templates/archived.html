@@ -1,0 +1,9 @@
+{% extends "index.html" %}
+{% block content %}{{super()}}
+{% for asset in archived %}
+<div class='archived'>
+{% for line in asset %}{{line}}{% endfor %}
+</div>
+{% endfor %}
+{% endblock %}
+

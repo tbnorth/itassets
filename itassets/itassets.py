@@ -292,9 +292,6 @@ def load_assets(asset_file):
     for asset in file_data.get('assets', []):
         asset['file_data'] = file_data
     file_data['file_path'] = os.path.abspath(asset_file)
-    file_data['assets'] = [
-        i for i in file_data['assets'] if 'archived' not in i.get('tags', [])
-    ]
     return file_data['assets']
 
 
@@ -388,6 +385,7 @@ def dot_node_name(text):
 def link_links(text):
     lines = text.split('\n')
     for line_i, line in enumerate(lines):
+        lines[line_i] = line.replace('<', '&lt;')
         if re.search(r'\w+://', line):
             words = [
                 f"<a href={i} target='_blank'>{i}</a>"
@@ -410,16 +408,24 @@ def edit_url(asset):
     return f"itas://{asset['file_data']['file_path']}#{asset['id']}"
 
 
-def report_to_html(asset, tooltip):
-    fn = html_filename(asset)
-    with open(f"{fn}", 'w') as rep:
-        rep.write(
-            f"<html><head><title>{asset.get('name')}</title></head><body>"
-        )
-        rep.write(f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>")
-        rep.write(link_links('\n'.join(tooltip)))
-        rep.write(f"\n<a href='{edit_url(asset)}'>edit</a>\n")
-        rep.write("</pre></body></html>")
+def report_to_html(asset, tooltip, write=True):
+    report = [
+        f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>",
+        link_links('\n'.join(tooltip)),
+        f"\n<a href='{edit_url(asset)}'>edit</a>\n",
+        "</pre>",
+    ]
+    if write:
+
+        fn = html_filename(asset)
+        with open(f"{fn}", 'w') as rep:
+            rep.write(
+                f"<html><head><title>{asset.get('name')}</title></head><body>"
+            )
+            for i in report:
+                rep.write(i)
+            rep.write(f"</body></html>")
+    return report
 
 
 def add_missing_deps(assets, other, ans):
@@ -452,6 +458,29 @@ def get_title(assets):
     return f"{ttl} updated {time.asctime()}"
 
 
+def get_tooltip(asset, issues):
+    tooltip = []
+    # add validation issues to top of tooltip
+    tooltip += ["%s %s" % (i, j) for i, j in issues.get(asset['id'], [])]
+    # put asset attributes in tooltip
+    tooltip.extend(
+        [
+            f"{k}: {v}"
+            for k, v in asset.items()
+            if isinstance(v, str) and not k.startswith('_')
+        ]
+    )
+    # put tags etc. in tooltip
+    for list_field in LIST_FIELDS:
+        if asset.get(list_field):
+            tooltip.append(list_field.upper())
+            for item in asset.get(list_field, []):
+                tooltip.append(f"  {item}")
+    # include path to asset def. file in tooltip
+    tooltip.append(f"Defined in {asset['file_data']['file_path']}")
+    return tooltip
+
+
 def assets_to_dot(assets, issues, title):
     other = {i['id']: i for i in assets}
     edit_linked = set()
@@ -468,24 +497,8 @@ def assets_to_dot(assets, issues, title):
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
-        real_deps = [i for i in asset_dep_ids(asset) if not i.startswith('^')]
-        tooltip = []
-        # put asset attributes in tooltip
-        tooltip.extend(
-            [
-                f"{k}: {v}"
-                for k, v in asset.items()
-                if isinstance(v, str) and not k.startswith('_')
-            ]
-        )
-        # put tags etc. in tooltip
-        for list_field in LIST_FIELDS:
-            if asset.get(list_field):
-                tooltip.append(list_field.upper())
-                for item in asset.get(list_field, []):
-                    tooltip.append(f"  {item}")
-        # include path to asset def. file in tooltip
-        tooltip.append(f"Defined in {asset['file_data']['file_path']}")
+        tooltip = get_tooltip(asset, issues)
+
         # dict of dot / graphviz node attributes
         attr = dict(
             label=dot_node_name(asset.get('name')),
@@ -496,9 +509,7 @@ def assets_to_dot(assets, issues, title):
             attr['label'] = asset['type'].split('/')[-1]
         # `style` is compound 'shape=box, color=cyan', so key is None
         attr[None] = (ASSET_TYPE[asset["type"]].style,)
-        # add validation issues to top of tooltip
         if asset['id'] in issues:
-            tooltip[:0] = ["%s %s" % (i, j) for i, j in issues[asset['id']]]
             if any(i[0] != 'NOTE' for i in issues[asset['id']]):
                 attr['style'] = 'filled'
                 attr['fillcolor'] = 'pink'
@@ -511,7 +522,7 @@ def assets_to_dot(assets, issues, title):
         ans.append(node_dot(asset['_node_id'], attr))
 
         # write links to graphviz file, FROM dep TO asset
-        for dep in real_deps:
+        for dep in [i for i in asset_dep_ids(asset) if not i.startswith('^')]:
             attr = dict(fontcolor='#00000040')
             if asset['id'] not in edit_linked:
                 edit_linked.add(asset['id'])
@@ -542,14 +553,20 @@ def assets_to_dot(assets, issues, title):
     return '\n'.join(ans)
 
 
-def write_reports(assets, issues, title):
+def write_reports(assets, issues, title, archived):
+
     path = os.path.join(os.path.dirname(__file__), 'templates')
     env = jinja2.Environment(loader=jinja2.FileSystemLoader([path]))
     generated = title.split(' updated ')[-1]
     applications = [i for i in assets if i['type'] == 'application']
     storage = [i for i in assets if i['type'].startswith('storage/')]
     applications.sort(key=lambda x: x['name'])
-    storage.sort(key=lambda x: x['name'])
+    storage.sort(key=lambda x: x['location'])
+    archived.sort(key=lambda x: x['name'])
+    archived = [
+        report_to_html(i, get_tooltip(i, issues), write=False)
+        for i in archived
+    ]
     for asset in assets:
         asset['_reppath'] = html_filename(asset)
         if asset['id'] in issues:
@@ -566,12 +583,13 @@ def write_reports(assets, issues, title):
         applications=applications,
         storage=storage,
         asset_types=asset_types,
+        archived=archived,
     )
     with open("index.html", 'w') as out:
         out.write(env.get_template("map.html").render(context))
 
     context['top'] = '../'
-    for rep in 'asset_types', 'storage', 'applications':
+    for rep in 'asset_types', 'storage', 'applications', 'archived':
         with open(f"asset_reports/_{rep}.html", 'w') as out:
             out.write(env.get_template(f"{rep}.html").render(context))
 
@@ -586,6 +604,10 @@ def main():
             print(f"Failed reading {asset_file}")
             raise
 
+    # separate archived assets
+    archived = [i for i in assets if 'archived' in i.get('tags', [])]
+    assets = [i for i in assets if 'archived' not in i.get('tags', [])]
+
     VALIDATORS_COMPILED.update(
         {re.compile(k): v for k, v in VALIDATORS.items()}
     )
@@ -595,7 +617,8 @@ def main():
         out.write(assets_to_dot(assets, issues, title))
 
     os.system("dot -Tpng -oassets.png -Tcmapx -oassets.map assets.dot")
-    write_reports(assets, issues, title)
+    write_reports(assets, issues, title, archived)
+    print(len(archived))
 
 
 if __name__ == "__main__":
