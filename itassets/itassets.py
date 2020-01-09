@@ -363,7 +363,7 @@ def validate_assets(assets):
     return failures
 
 
-def propagate_dependent_types(assets):
+def propagate_dependent(assets, output='_dependent_types', field='type'):
     """Add a `_dependent_types` set to all assets which lists the types of
     assets dependent on this asset, to generate trimmed maps with --leaf-type.
     """
@@ -371,13 +371,13 @@ def propagate_dependent_types(assets):
     lookup = {i['id']: i for i in assets}
 
     def add_types(asset, type_, lookup):
-        asset.setdefault('_dependent_types', set()).add(type_)
+        asset.setdefault(output, set()).add(type_)
         for depend in asset_dep_ids(asset):
             if depend in lookup:
                 add_types(lookup[depend], type_, lookup)
 
     for asset in assets:
-        add_types(asset, asset['type'], lookup)
+        add_types(asset, asset[field], lookup)
 
 
 def node_dot(id_, attr):
@@ -442,9 +442,11 @@ def report_to_html(asset, tooltip, write=True):
         link_links('\n'.join(tooltip)),
         f"\n<a href='{edit_url(asset)}'>edit</a> ",
         f"<a href='_{type_.replace('/', '_')}.html'>"
-        f"see all {type_} assets</a>\n",
-        "</pre>",
+        f"all {type_} assets</a> ",
     ]
+    if asset['type'] == 'application':
+        report.append(f"<a href='_{asset['id']}.html'>dependencies</a>\n")
+    report.append("</pre>")
     if write:
 
         fn = html_filename(asset)
@@ -626,33 +628,51 @@ def write_reports(assets, issues, title, archived):
 
 def write_maps(assets, issues, title):
 
-    write_map("index", assets, issues, title, ".*")
     write_map(
-        "asset_reports/_unapplied",
-        assets,
-        issues,
-        title,
-        "application",
+        base="index",
+        assets=assets,
+        issues=issues,
+        title=title,
+        leads_to=".*",
+        in_field="_dependent_types",
+    )
+    write_map(
+        base="asset_reports/_unapplied",
+        assets=assets,
+        issues=issues,
+        title=title,
+        leads_to="application",
+        in_field="_dependent_types",
         negate=True,
     )
     for type_ in ASSET_TYPE:
         write_map(
-            "asset_reports/_" + type_.replace('/', '_'),
-            assets,
-            issues,
-            title,
-            type_,
+            base="asset_reports/_" + type_.replace('/', '_'),
+            assets=assets,
+            issues=issues,
+            title=title,
+            leads_to=type_,
+            in_field="_dependent_types",
+        )
+    for app in [i for i in assets if i['type'] == 'application']:
+        write_map(
+            base="asset_reports/_" + app['id'],
+            assets=assets,
+            issues=issues,
+            title=title,
+            leads_to=app['id'],
+            in_field="_dependent_ids",
         )
 
 
-def write_map(base, assets, issues, title, leads_to, negate=False):
+def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
 
     use = [
         i
         for i in assets
         if any(
             re.search(f'^{leads_to}$', j)
-            for j in (i.get('_dependent_types') or [])
+            for j in (i.get(in_field) or [])
         )
     ]
     if negate:
@@ -715,7 +735,8 @@ def main():
     write_reports(assets, issues, title, archived)
 
     # add _dependent_types to each asset listing types of all dependents
-    propagate_dependent_types(assets)
+    propagate_dependent(assets, output='_dependent_types', field='type')
+    propagate_dependent(assets, output='_dependent_ids', field='id')
 
     if opt.leaf_type:
         n = len(assets)
