@@ -161,6 +161,25 @@ LIST_FIELDS = (
     'tags',
 )
 
+DOT_HEADER = [
+    "digraph Assets {{",
+    '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
+    '       label="{title}", fontname=FreeSans, tooltip=" "]',
+    "  node [fontname=FreeSans, fontsize=10]",
+    "  edge [fontname=FreeSans, fontsize=10]",
+]
+
+DOT_HEADER = [
+    "digraph Assets {{",
+    '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
+    '         label="{title}", fontname=FreeSans, tooltip=" ",',
+    '         bgcolor=black]',
+    '  node [fontname=FreeSans, fontsize=10, color="#808080", '
+    '        fontcolor="#808080"]',
+    '  edge [fontname=FreeSans, fontsize=10, color="#808080"]',
+]
+DOT_ERR_COL = '#200000'
+
 VALIDATORS = defaultdict(lambda: [])
 VALIDATORS_COMPILED = {}  # updated in main()
 
@@ -293,6 +312,11 @@ def get_options(args=None):
     # modifications / validations go here
 
     return opt
+
+
+def get_jinja():
+    path = os.path.join(os.path.dirname(__file__), 'templates')
+    return jinja2.Environment(loader=jinja2.FileSystemLoader([path]))
 
 
 def load_assets(asset_file):
@@ -435,29 +459,41 @@ def edit_url(asset):
     return f"itas://{asset['file_data']['file_path']}#{asset['id']}"
 
 
-def report_to_html(asset, tooltip, write=True):
-    type_ = asset['type']
-    report = [
-        f"<h2>{asset['id']}: {asset.get('name')}</h2><pre>",
-        link_links('\n'.join(tooltip)),
-        f"\n<a href='{edit_url(asset)}'>edit</a> ",
-        f"<a href='_{type_.replace('/', '_')}.html'>"
-        f"all {type_} assets</a> ",
-    ]
-    if asset['type'] == 'application':
-        report.append(f"<a href='_{asset['id']}.html'>dependencies</a>\n")
-    report.append("</pre>")
-    if write:
+def report_to_html(asset, issues, title, write=True):
+    keys = {
+        k: link_links(asset[k])
+        for k in asset
+        if not k.startswith('_') and isinstance(asset[k], str)
+    }
+    keys['defined_in'] = asset['file_data']['file_path']
+    lists = {
+        k: [link_links(i) for i in v]
+        for k, v in asset.items()
+        if not k.startswith('_') and isinstance(asset[k], list)
+    }
 
-        fn = html_filename(asset)
-        with open(f"{fn}", 'w') as rep:
-            rep.write(
-                f"<html><head><title>{asset.get('name')}</title></head><body>"
-            )
-            for i in report:
-                rep.write(i)
-            rep.write(f"</body></html>")
-    return report
+    context = dict(
+        asset=asset,
+        issues=[i for i in issues.get(asset['id'], [])],
+        edit_url=edit_url(asset),
+        keys=keys,
+        lists=lists,
+        top="../",
+        generated=title.split(' updated ')[-1],
+    )
+
+    if write:
+        template = get_jinja().get_template("asset_def.html")
+    else:
+        template = get_jinja().get_template("asset_block.html")
+
+    html = template.render(context)
+
+    if write:
+        with open(html_filename(asset), 'w') as rep:
+            rep.write(html)
+
+    return html
 
 
 def add_missing_deps(assets, other, ans):
@@ -467,7 +503,7 @@ def add_missing_deps(assets, other, ans):
             if dep not in other:
                 ans.append(
                     f'  n{len(other)} [label="???", shape=doubleoctagon, '
-                    'fillcolor=pink, style=filled]'
+                    f'fillcolor="{DOT_ERR_COL}", style=filled]'
                 )
                 # used just to display missing asset on graph plot
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
@@ -516,19 +552,17 @@ def get_tooltip(asset, issues):
 def assets_to_dot(assets, issues, title, top):
     other = {i['id']: i for i in assets}
     edit_linked = set()
-    ans = [
-        "digraph Assets {",
-        f'  graph [rankdir=LR, concentrate=true, URL="{top}index.html"'
-        f'       label="{title}", fontname=FreeSans, tooltip=" "]',
-        "  node [fontname=FreeSans, fontsize=10]",
-        "  edge [fontname=FreeSans, fontsize=10]",
-    ]
+    ans = [i.format(top=top, title=title) for i in DOT_HEADER]
+
     add_missing_deps(assets, other, ans)
     os.makedirs("asset_reports", exist_ok=True)
 
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
+        # FIXME: not here?
+        report_to_html(asset, issues, title)
+
         tooltip = get_tooltip(asset, issues)
 
         # dict of dot / graphviz node attributes
@@ -544,9 +578,7 @@ def assets_to_dot(assets, issues, title, top):
         if asset['id'] in issues:
             if any(i[0] != 'NOTE' for i in issues[asset['id']]):
                 attr['style'] = 'filled'
-                attr['fillcolor'] = 'pink'
-        # write tooltip to validation HTML page for copy / paste etc.
-        report_to_html(asset, tooltip)
+                attr['fillcolor'] = DOT_ERR_COL
         # tooltip dict -> text
         attr['tooltip'] = '\\n'.join(tooltip)
 
@@ -587,8 +619,7 @@ def assets_to_dot(assets, issues, title, top):
 
 def write_reports(assets, issues, title, archived):
 
-    path = os.path.join(os.path.dirname(__file__), 'templates')
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader([path]))
+    env = get_jinja()
     generated = title.split(' updated ')[-1]
     applications = [i for i in assets if i['type'] == 'application']
     storage = [i for i in assets if i['type'].startswith('storage/')]
@@ -596,7 +627,7 @@ def write_reports(assets, issues, title, archived):
     storage.sort(key=lambda x: x['location'])
     archived.sort(key=lambda x: x['name'])
     archived = [
-        report_to_html(i, get_tooltip(i, issues), write=False)
+        report_to_html(i, issues, title, write=False)
         for i in archived
     ]
     for asset in assets:
@@ -670,10 +701,7 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
     use = [
         i
         for i in assets
-        if any(
-            re.search(f'^{leads_to}$', j)
-            for j in (i.get(in_field) or [])
-        )
+        if any(re.search(f'^{leads_to}$', j) for j in (i.get(in_field) or []))
     ]
     if negate:
         lookup = {i['id']: i for i in assets}
@@ -694,8 +722,7 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
         out.write(assets_to_dot(use, issues, title, top))
     os.system(f"dot -Tpng -o{base}.png -Tcmapx -o{base}.map {base}.dot")
 
-    path = os.path.join(os.path.dirname(__file__), 'templates')
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader([path]))
+    env = get_jinja()
     generated = title.split(' updated ')[-1]
     subset = 'All assets' if base == 'index' else f'{leads_to} assets only'
     if negate:
