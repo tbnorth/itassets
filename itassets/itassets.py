@@ -449,7 +449,11 @@ def link_links(text):
 
 
 def html_filename(asset):
-    fn = asset.get('name', asset['id']).replace('/', '-')
+    try:
+        fn = asset.get('name', asset['id']).replace('/', '-')
+    except Exception:
+        print(asset)
+        raise
     return 'asset_reports/' + '_'.join(fn.split()) + '.html'
 
 
@@ -459,7 +463,7 @@ def edit_url(asset):
     return f"itas://{asset['file_data']['file_path']}#{asset['id']}"
 
 
-def report_to_html(asset, issues, title, write=True):
+def report_to_html(asset, lookup, issues, title, write=True):
     keys = {
         k: link_links(asset[k])
         for k in asset
@@ -469,15 +473,46 @@ def report_to_html(asset, issues, title, write=True):
     lists = {
         k: [link_links(i) for i in v]
         for k, v in asset.items()
-        if not k.startswith('_') and isinstance(asset[k], list)
+        if not k.startswith('_')
+        and isinstance(asset[k], list)
+        and k != 'depends_on'
     }
+    Link = namedtuple("Link", 'link text')
+    dependencies = []
+    for txt in asset.get('depends_on', []):
+        id_ = txt.split()[0]
+        if id_ in lookup:
+            dependencies.append(
+                Link(
+                    html_filename(lookup[id_]),
+                    lookup[id_]['type']
+                    + ':'
+                    + lookup[id_]['name']
+                    + ' '
+                    + ' '.join(txt.split()[1:]),
+                )
+            )
+        else:
+            Link('', txt)
+
+    dependents = [
+        Link(
+            html_filename(lookup[id_]),
+            lookup[id_]['type'] + ':' + lookup[id_]['name'],
+        )
+        for id_ in asset['_dependents']
+        if id_ in lookup  # absent in trimmed graph maybe
+    ]
 
     context = dict(
         asset=asset,
+        lookup=lookup,
         issues=[i for i in issues.get(asset['id'], [])],
         edit_url=edit_url(asset),
         keys=keys,
         lists=lists,
+        dependencies=dependencies,
+        dependents=dependents,
         top="../",
         generated=title.split(' updated ')[-1],
     )
@@ -560,8 +595,6 @@ def assets_to_dot(assets, issues, title, top):
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
     for asset in assets:
-        # FIXME: not here?
-        report_to_html(asset, issues, title)
 
         tooltip = get_tooltip(asset, issues)
 
@@ -587,7 +620,7 @@ def assets_to_dot(assets, issues, title, top):
 
         # write links to graphviz file, FROM dep TO asset
         for dep in [i for i in asset_dep_ids(asset) if not i.startswith('^')]:
-            attr = dict(fontcolor='#00000040')
+            attr = dict(fontcolor='#ffffff20')
             if asset['id'] not in edit_linked:
                 edit_linked.add(asset['id'])
                 attr.update(
@@ -626,9 +659,9 @@ def write_reports(assets, issues, title, archived):
     applications.sort(key=lambda x: x['name'])
     storage.sort(key=lambda x: x['location'])
     archived.sort(key=lambda x: x['name'])
+    lookup = {i['id']: i for i in assets}
     archived = [
-        report_to_html(i, issues, title, write=False)
-        for i in archived
+        report_to_html(i, lookup, issues, title, write=False) for i in archived
     ]
     for asset in assets:
         asset['_reppath'] = html_filename(asset)
@@ -758,12 +791,24 @@ def main():
         {re.compile(k): v for k, v in VALIDATORS.items()}
     )
     issues = validate_assets(assets)
-    title = get_title(assets)
-    write_reports(assets, issues, title, archived)
 
     # add _dependent_types to each asset listing types of all dependents
     propagate_dependent(assets, output='_dependent_types', field='type')
     propagate_dependent(assets, output='_dependent_ids', field='id')
+    lookup = {i['id']: i for i in assets}
+    title = get_title(assets)
+    for asset in assets:
+        asset.setdefault('_dependents', [])  # so they all have it
+        asset['_def_link'] = html_filename(asset)
+        for dep in asset_dep_ids(asset):
+            if dep in lookup:
+                lookup[dep].setdefault('_dependents', []).append(asset['id'])
+        report_to_html(asset, lookup, issues, title)
+    for asset in archived:
+        asset.setdefault('_dependents', [])  # even these
+        report_to_html(asset, lookup, issues, title)
+
+    write_reports(assets, issues, title, archived)
 
     if opt.leaf_type:
         n = len(assets)
