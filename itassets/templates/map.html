@@ -1,9 +1,29 @@
 {% extends "index.html" %}
+{% block extrahead %}{{super()}}
+<script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"></script>
+<script>
+
+let a2s = {{asset_map}};
+let jQ = jQuery;
+function hilite() {
+
+   let frag = window.location.hash.replace('#', '');
+   if (frag in a2s) {
+       // frag = `#${a2s[frag]}`
+       // let node = `${frag} polygon, ${frag} ellipse, ${frag} path, ${frag} polyline`;
+       let node = jQ(`#${a2s[frag]}`).find("polygon, ellipse, path, polyline");
+       node.css({stroke: 'green'});
+       let y = node.offset().top;
+       let w = window.innerHeight;
+       jQ([document.documentElement, document.body]).scrollTop(y-w/2);
+   }
+}
+
+jQ(hilite);
+
+</script>
+{% endblock %}
 {% block content %}{{super()}}
 <h4>{{subset}}</h4>
-<img src="{{top}}{{base}}.png" usemap="#mainmap" />
-<map id="mainmap" name="mainmap">
 {{imap}}
-</map>
 {% endblock %}
-

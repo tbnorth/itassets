@@ -1,10 +1,12 @@
 import argparse
+import json
 import os
 import re
 import time
 from collections import defaultdict, namedtuple
 from itertools import chain
 
+from lxml import etree
 import jinja2
 import yaml
 
@@ -620,7 +622,7 @@ def assets_to_dot(assets, issues, title, top):
 
         # write links to graphviz file, FROM dep TO asset
         for dep in [i for i in asset_dep_ids(asset) if not i.startswith('^')]:
-            attr = dict(fontcolor='#ffffff20')
+            attr = dict(fontcolor='#303030')
             if asset['id'] not in edit_linked:
                 edit_linked.add(asset['id'])
                 attr.update(
@@ -729,6 +731,24 @@ def write_maps(assets, issues, title):
         )
 
 
+def asset_to_svg(svg):
+    """get a mapping from asset IDs to svg node IDs"""
+    dom = etree.fromstring(svg.encode('utf-8'))
+    nodes = dom.xpath(
+        "//svg:g[@id='graph0']/svg:g",
+        namespaces={
+            'svg': "http://www.w3.org/2000/svg",
+            'xlink': "http://www.w3.org/1999/xlink",
+        },
+    )
+    a2s = {}
+    for node in nodes:
+        target = node.xpath(".//@target")
+        if target:
+            a2s[target[0][1:]] = node.get('id')
+    return a2s
+
+
 def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
 
     use = [
@@ -753,24 +773,27 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
     top = './' if base == 'index' else '../'
     with open(base + ".dot", 'w') as out:
         out.write(assets_to_dot(use, issues, title, top))
-    os.system(f"dot -Tpng -o{base}.png -Tcmapx -o{base}.map {base}.dot")
 
-    env = get_jinja()
+    os.system(f"dot -Tsvg -o{base}.svg {base}.dot")
+
     generated = title.split(' updated ')[-1]
     subset = 'All assets' if base == 'index' else f'{leads_to} assets only'
     if negate:
         subset = f"Assets not leading to an asset of type {leads_to}"
 
+    svg = open(f"{base}.svg").read()
+    asset_map = asset_to_svg(svg)
     context = dict(
         title=title,
-        imap=open(f"{base}.map").read(),
+        imap=svg,
+        asset_map=json.dumps(asset_map),
         generated=generated,
         top=top,
         base=base,
         subset=subset,
     )
     with open(f"{base}.html", 'w') as out:
-        out.write(env.get_template("map.html").render(context))
+        out.write(get_jinja().get_template("map.html").render(context))
 
 
 def main():

@@ -74,10 +74,14 @@ a:hover {
   }
 
 </style>
+{% block extrahead %}
+{% endblock %}
 </head>
 <body>
 {% block content %}
 {% endblock %}
 <div class="footer">Generated: {{generated}}</div>
+{% block extrafoot %}
+{% endblock %}
 </body>
 </html>
