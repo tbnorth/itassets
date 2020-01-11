@@ -7,11 +7,11 @@ let a2s = {{asset_map}};
 let jQ = jQuery;
 function hilite() {
 
+   let geoms = "polygon, ellipse, path, polyline";
    let frag = window.location.hash.replace('#', '');
    if (frag in a2s) {
-       // frag = `#${a2s[frag]}`
-       // let node = `${frag} polygon, ${frag} ellipse, ${frag} path, ${frag} polyline`;
-       let node = jQ(`#${a2s[frag]}`).find("polygon, ellipse, path, polyline");
+       jQ("#graph0 g").find(geoms).css({stroke: '#808080'});
+       let node = jQ(`#${a2s[frag]}`).find(geoms);
        node.css({stroke: 'green'});
        let y = node.offset().top;
        let w = window.innerHeight;
@@ -20,6 +20,7 @@ function hilite() {
 }
 
 jQ(hilite);
+jQ(window).on("hashchange", hilite)
 
 </script>
 {% endblock %}
