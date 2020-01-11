@@ -1,4 +1,5 @@
 mkdir -p itassets
-cp -v ../itassets/*.py itassets/
+cp -rv ../itassets/* itassets/
+
 docker build -t itassets .
 

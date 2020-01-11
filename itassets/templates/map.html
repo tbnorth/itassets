@@ -10,7 +10,7 @@ function hilite() {
    let geoms = "polygon, ellipse, path, polyline";
    let frag = window.location.hash.replace('#', '');
    if (frag in a2s) {
-       jQ("#graph0 g").find(geoms).css({stroke: '#808080'});
+       jQ("#graph0 g.node").find(geoms).css({stroke: '#808080'});
        let node = jQ(`#${a2s[frag]}`).find(geoms);
        node.css({stroke: 'green'});
        let y = node.offset().top;
