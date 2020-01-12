@@ -10,6 +10,8 @@ from lxml import etree
 import jinja2
 import yaml
 
+OUTPUT_DIR = 'asset_reports'
+
 AT = namedtuple(
     "AssetType", "description style color tags fields depends prefix"
 )
@@ -163,24 +165,37 @@ LIST_FIELDS = (
     'tags',
 )
 
-DOT_HEADER = [
-    "digraph Assets {{",
-    '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
-    '       label="{title}", fontname=FreeSans, tooltip=" "]',
-    "  node [fontname=FreeSans, fontsize=10]",
-    "  edge [fontname=FreeSans, fontsize=10]",
-]
+LIGHT_THEME = dict(
+    dot_header=[
+        "digraph Assets {{",
+        '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
+        '       label="{title}", fontname=FreeSans, tooltip=" "]',
+        "  node [fontname=FreeSans, fontsize=10]",
+        "  edge [fontname=FreeSans, fontsize=10]",
+    ],
+    dot_err_col='pink',
+)
 
-DOT_HEADER = [
-    "digraph Assets {{",
-    '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
-    '         label="{title}", fontname=FreeSans, tooltip=" ",',
-    '         bgcolor=black]',
-    '  node [fontname=FreeSans, fontsize=10, color="#808080", '
-    '        fontcolor="#808080"]',
-    '  edge [fontname=FreeSans, fontsize=10, color="#808080"]',
-]
-DOT_ERR_COL = '#200000'
+DARK_THEME = dict(
+    stroke="#808080",
+    text="#808080",
+)
+DARK_THEME.update(dict(
+    dot_header=[
+        "digraph Assets {{",
+        '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
+        '         label="{title}", fontname=FreeSans, tooltip=" ",',
+        '         bgcolor=black]',
+        f'  node [fontname=FreeSans, fontsize=10, '
+        f'color="{DARK_THEME["stroke"]}", '
+        f'        fontcolor="{DARK_THEME["text"]}"]',
+        f'  edge [fontname=FreeSans, fontsize=10, ',
+        f'color="{DARK_THEME["stroke"]}"]',
+    ],
+    dot_err_col='#200000',
+))
+
+THEME = DARK_THEME
 
 VALIDATORS = defaultdict(lambda: [])
 VALIDATORS_COMPILED = {}  # updated in main()
@@ -456,7 +471,7 @@ def html_filename(asset):
     except Exception:
         print(asset)
         raise
-    return 'asset_reports/' + '_'.join(fn.split()) + '.html'
+    return OUTPUT_DIR + '/' + '_'.join(fn.split()) + '.html'
 
 
 def edit_url(asset):
@@ -540,7 +555,7 @@ def add_missing_deps(assets, other, ans):
             if dep not in other:
                 ans.append(
                     f'  n{len(other)} [label="???", shape=doubleoctagon, '
-                    f'fillcolor="{DOT_ERR_COL}", style=filled]'
+                    f'fillcolor="{THEME.dot_err_col}", style=filled]'
                 )
                 # used just to display missing asset on graph plot
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
@@ -589,10 +604,10 @@ def get_tooltip(asset, issues):
 def assets_to_dot(assets, issues, title, top):
     other = {i['id']: i for i in assets}
     edit_linked = set()
-    ans = [i.format(top=top, title=title) for i in DOT_HEADER]
+    ans = [i.format(top=top, title=title) for i in THEME.dot_header]
 
     add_missing_deps(assets, other, ans)
-    os.makedirs("asset_reports", exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
@@ -613,7 +628,7 @@ def assets_to_dot(assets, issues, title, top):
         if asset['id'] in issues:
             if any(i[0] != 'NOTE' for i in issues[asset['id']]):
                 attr['style'] = 'filled'
-                attr['fillcolor'] = DOT_ERR_COL
+                attr['fillcolor'] = THEME.dot_err_coL
         # tooltip dict -> text
         attr['tooltip'] = '\\n'.join(tooltip)
 
@@ -688,7 +703,7 @@ def write_reports(assets, issues, title, archived):
 
     context['top'] = '../'
     for rep in 'asset_types', 'storage', 'applications', 'archived':
-        with open(f"asset_reports/_{rep}.html", 'w') as out:
+        with open(f"{OUTPUT_DIR}/_{rep}.html", 'w') as out:
             out.write(env.get_template(f"{rep}.html").render(context))
 
 
@@ -703,7 +718,7 @@ def write_maps(assets, issues, title):
         in_field="_dependent_types",
     )
     write_map(
-        base="asset_reports/_unapplied",
+        base=f"{OUTPUT_DIR}/_unapplied",
         assets=assets,
         issues=issues,
         title=title,
@@ -713,7 +728,7 @@ def write_maps(assets, issues, title):
     )
     for type_ in ASSET_TYPE:
         write_map(
-            base="asset_reports/_" + type_.replace('/', '_'),
+            base=f"{OUTPUT_DIR}/_" + type_.replace('/', '_'),
             assets=assets,
             issues=issues,
             title=title,
@@ -722,7 +737,7 @@ def write_maps(assets, issues, title):
         )
     for app in [i for i in assets if i['type'] == 'application']:
         write_map(
-            base="asset_reports/_" + app['id'],
+            base=f"{OUTPUT_DIR}/_" + app['id'],
             assets=assets,
             issues=issues,
             title=title,
@@ -815,6 +830,8 @@ def main():
     )
     issues = validate_assets(assets)
 
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
     # add _dependent_types to each asset listing types of all dependents
     propagate_dependent(assets, output='_dependent_types', field='type')
     propagate_dependent(assets, output='_dependent_ids', field='id')
@@ -822,14 +839,13 @@ def main():
     title = get_title(assets)
     for asset in assets:
         asset.setdefault('_dependents', [])  # so they all have it
-        asset['_def_link'] = html_filename(asset)
         for dep in asset_dep_ids(asset):
             if dep in lookup:
                 lookup[dep].setdefault('_dependents', []).append(asset['id'])
+    for asset in assets:  # after all dependents recorded
         report_to_html(asset, lookup, issues, title)
     for asset in archived:
         asset.setdefault('_dependents', [])  # even these
-        report_to_html(asset, lookup, issues, title)
 
     write_reports(assets, issues, title, archived)
 
