@@ -3,7 +3,7 @@
 Code to validate and graphically map a database of IT assets.
 
 The database is simply a collection of YAML files describing assets.  Asset
-types include `application`, `cloud/service`, `container/docker`,
+types include `application/external`, `cloud/service`, `container/docker`,
 `resource/deployment`, `physical/server`, `backup` etc.  Relationships are
 validated, for example `container/docker` should define a dependency on an
 asset of type `resource/deployment`, typically linking to the Dockerfile and

@@ -21,9 +21,22 @@ AT = namedtuple(
 #        justify its existence
 # bottom => bottom level node like a server, doesn't need to depend on anything
 ASSET_TYPE = {
-    'application': AT(
+    'application/external': AT(
         '"Terminal" asset type, that users use',
         "shape=oval, width=1.5, rank=max",
+        'green',
+        ['top'],
+        ['location', 'owner'],
+        [
+            '(cloud/service|container/.*|vm/virtualbox|'
+            'physical/server/service$|website/static)'
+        ],
+        'app',
+    ),
+    # application/internal same as external except peripheries=2
+    'application/internal': AT(
+        '"Terminal" asset type, that users use',
+        "shape=oval, width=1.5, rank=max, peripheries=2",
         'green',
         ['top'],
         ['location', 'owner'],
@@ -176,24 +189,23 @@ LIGHT_THEME = dict(
     dot_err_col='pink',
 )
 
-DARK_THEME = dict(
-    stroke="#808080",
-    text="#808080",
+DARK_THEME = dict(stroke="#808080", text="#808080")
+DARK_THEME.update(
+    dict(
+        dot_header=[
+            "digraph Assets {{",
+            '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
+            '         label="{title}", fontname=FreeSans, tooltip=" ",',
+            '         bgcolor=black]',
+            f'  node [fontname=FreeSans, fontsize=10, '
+            f'color="{DARK_THEME["stroke"]}", '
+            f'        fontcolor="{DARK_THEME["text"]}"]',
+            f'  edge [fontname=FreeSans, fontsize=10, ',
+            f'color="{DARK_THEME["stroke"]}"]',
+        ],
+        dot_err_col='#200000',
+    )
 )
-DARK_THEME.update(dict(
-    dot_header=[
-        "digraph Assets {{",
-        '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
-        '         label="{title}", fontname=FreeSans, tooltip=" ",',
-        '         bgcolor=black]',
-        f'  node [fontname=FreeSans, fontsize=10, '
-        f'color="{DARK_THEME["stroke"]}", '
-        f'        fontcolor="{DARK_THEME["text"]}"]',
-        f'  edge [fontname=FreeSans, fontsize=10, ',
-        f'color="{DARK_THEME["stroke"]}"]',
-    ],
-    dot_err_col='#200000',
-))
 
 THEME = DARK_THEME
 
@@ -555,7 +567,7 @@ def add_missing_deps(assets, other, ans):
             if dep not in other:
                 ans.append(
                     f'  n{len(other)} [label="???", shape=doubleoctagon, '
-                    f'fillcolor="{THEME.dot_err_col}", style=filled]'
+                    f'fillcolor="{THEME["dot_err_col"]}", style=filled]'
                 )
                 # used just to display missing asset on graph plot
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
@@ -604,7 +616,7 @@ def get_tooltip(asset, issues):
 def assets_to_dot(assets, issues, title, top):
     other = {i['id']: i for i in assets}
     edit_linked = set()
-    ans = [i.format(top=top, title=title) for i in THEME.dot_header]
+    ans = [i.format(top=top, title=title) for i in THEME["dot_header"]]
 
     add_missing_deps(assets, other, ans)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -628,7 +640,7 @@ def assets_to_dot(assets, issues, title, top):
         if asset['id'] in issues:
             if any(i[0] != 'NOTE' for i in issues[asset['id']]):
                 attr['style'] = 'filled'
-                attr['fillcolor'] = THEME.dot_err_coL
+                attr['fillcolor'] = THEME["dot_err_col"]
         # tooltip dict -> text
         attr['tooltip'] = '\\n'.join(tooltip)
 
@@ -671,7 +683,7 @@ def write_reports(assets, issues, title, archived):
 
     env = get_jinja()
     generated = title.split(' updated ')[-1]
-    applications = [i for i in assets if i['type'] == 'application']
+    applications = [i for i in assets if i['type'].startswith('application/')]
     storage = [i for i in assets if i['type'].startswith('storage/')]
     applications.sort(key=lambda x: x['name'])
     storage.sort(key=lambda x: x['location'])
@@ -722,7 +734,7 @@ def write_maps(assets, issues, title):
         assets=assets,
         issues=issues,
         title=title,
-        leads_to="application",
+        leads_to="application/.*",
         in_field="_dependent_types",
         negate=True,
     )
@@ -735,7 +747,7 @@ def write_maps(assets, issues, title):
             leads_to=type_,
             in_field="_dependent_types",
         )
-    for app in [i for i in assets if i['type'] == 'application']:
+    for app in [i for i in assets if i['type'].startswith('application/')]:
         write_map(
             base=f"{OUTPUT_DIR}/_" + app['id'],
             assets=assets,
