@@ -6,6 +6,7 @@ individual asset type maps linked below, there's a
 </p>
 {% for at in asset_types %}
 <h3>{{at.id}} <span class="prefix">{{at.prefix}}_</span></h3>
+<img src="__{{at.id|replace('/', '-')}}.svg" style="float:right; margin-right: 50%"/>
 <p>{{at.description}}</p>
 <div>Depends on: <code>{{at.depends}}</code></div>
 <div>Required fields: <code>{{at.fields}}</code></div>

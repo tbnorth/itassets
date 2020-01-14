@@ -3,16 +3,16 @@
 <p>A <span class='issues'>colored heading</span> only indicates issues
 with the application's own asset definition, a non-colored heading doesn't
 mean there are no issues with the application's dependencies, check
-<a href="{{top}}index.html">the map</a>.</p>
+the map link.</p>
 <table>
 <tr>
   <th>Type</th>
   <th>Name</th>
   <th>Description</th>
-  <th>Link</th>
   <th>Def.</th>
   <th>Deps.</th>
   <th>Map</th>
+  <th>Link</th>
 </tr>
 {% for app in applications %}
 {% if app.type == 'application/external' %}<tr><td>External</td>{% include 'application_block.html' %}</tr>{% endif %}

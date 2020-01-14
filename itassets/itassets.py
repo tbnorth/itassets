@@ -88,7 +88,7 @@ ASSET_TYPE = {
             'physical/server/service$)',
             'backup',
         ],
-        'db_',
+        'db',
     ),
     'drive': AT(
         "A physical drive",
@@ -679,6 +679,17 @@ def assets_to_dot(assets, issues, title, top):
     return '\n'.join(ans)
 
 
+def make_asset_key(key, asset):
+    """Make node map key images"""
+    ans = [i.format(top='', title='') for i in THEME["dot_header"]]
+    ans += [f"{asset.prefix} [{asset.style}]"]
+    ans += ['}']
+    outfile = f"{OUTPUT_DIR}/__{key.replace('/', '-')}"
+    with open(f"{outfile}.dot", 'w') as out:
+        out.write('\n'.join(ans))
+    os.system(f"dot -Tsvg -o{outfile}.svg {outfile}.dot")
+
+
 def write_reports(assets, issues, title, archived):
 
     env = get_jinja()
@@ -702,6 +713,7 @@ def write_reports(assets, issues, title, archived):
     for key, asset in ASSET_TYPE.items():
         asset_types.append(asset._asdict())
         asset_types[-1]['id'] = key
+        make_asset_key(key, asset)
     # types of issues
     issue_counts = set(j[0] for i in issues.values() for j in i)
     # count of each type
