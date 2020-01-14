@@ -59,6 +59,23 @@ a {
 a:hover {
   border-bottom: solid 1px;
   }
+table, th, td {
+  border-collapse:collapse;
+  border: 5px solid transparent;
+  }
+tr.even {
+  background: #f0f0f0;
+  }
+tr:hover {
+  font-weight: bold;
+  font-style: italic;
+  }
+tr td.hide a {
+  color: transparent;
+  }
+tr:hover td.hide a {
+  color: blue;
+  }
 
 {% if theme.name == 'dark' %}
 body {
@@ -86,6 +103,12 @@ a:visited {
   color: #009000;
   }
 a:hover {
+  color: #00b000;
+  }
+tr.even {
+  background: #101010;
+  }
+tr:hover td.hide a {
   color: #00b000;
   }
 {% endif %}

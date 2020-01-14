@@ -1,0 +1,18 @@
+{% extends "index.html" %}
+{% block content %}{{super()}}
+<table>
+{% for asset in assets %}
+<tr class="{{loop.cycle('odd','odd','odd','even','even','even')}}">
+<td class='hide'><a target="_def_{{asset.id}}" href="{{top}}{{asset._reppath}}">def</a></td>
+<td class='hide'><a target="_map" href="{{top}}index.html#{{asset.id}}">map</a></td>
+<td class='hide'><a href="{{asset._edit_url}}">edit</a></td>
+<td><span class='{{asset._class}}'>{{asset.id}}</span></td>
+<td>{{asset.name}}</td>
+<td>{{asset.description}}</td>
+<td>{{asset.type}}</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}
+
+

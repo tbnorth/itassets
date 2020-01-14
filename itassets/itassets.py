@@ -490,12 +490,7 @@ def link_links(text):
 
 
 def html_filename(asset):
-    try:
-        fn = asset.get('name', asset['id']).replace('/', '-').replace('?', '-')
-    except Exception:
-        print(asset)
-        raise
-    return '_'.join(fn.split()) + '.html'
+    return '_'.join(asset['id'].split()) + '.html'
 
 
 def edit_url(asset):
@@ -709,7 +704,7 @@ def write_reports(assets, issues, title, archived):
     generated = title.split(' updated ')[-1]
     applications = [i for i in assets if i['type'].startswith('application/')]
     storage = [i for i in assets if i['type'].startswith('storage/')]
-    applications.sort(key=lambda x: x['name'])
+    applications.sort(key=lambda x: (x['type'], x['name']))
     storage.sort(key=lambda x: x['location'])
     archived.sort(key=lambda x: x['name'])
     lookup = {i['id']: i for i in assets}
@@ -737,6 +732,7 @@ def write_reports(assets, issues, title, archived):
     context = dict(
         applications=applications,
         archived=archived,
+        assets=assets,
         asset_types=asset_types,
         generated=generated,
         issue_counts=sorted((k, v) for k, v in issue_counts.items()),
@@ -751,10 +747,11 @@ def write_reports(assets, issues, title, archived):
         out.write(env.get_template("map.html").render(context))
 
     for rep in (
-        'asset_types',
-        'storage',
         'applications',
         'archived',
+        'asset_types',
+        'list',
+        'storage',
         'validation',
     ):
         with open(f"{OPT.output}/_{rep}.html", 'w') as out:

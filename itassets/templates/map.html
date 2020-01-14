@@ -28,3 +28,10 @@ jQ(window).on("hashchange", hilite)
 <h4>{{subset}}</h4>
 {{imap}}
 {% endblock %}
+{% block extrafoot %}{{super()}}
+{% if theme.name == 'light' %}
+<a style="float: right" target="_map" href="{{top}}dark/index.html">(dark theme)</a>
+{% else %}
+<a style="float: right" target="_map" href="{{top}}../index.html">(light theme)</a>
+{% endif %}
+{% endblock %}
