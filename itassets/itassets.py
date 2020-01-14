@@ -5,12 +5,13 @@ import re
 import time
 from collections import defaultdict, namedtuple
 from itertools import chain
+from types import SimpleNamespace
 
 from lxml import etree
 import jinja2
 import yaml
 
-OUTPUT_DIR = 'asset_inventory'
+OPT = SimpleNamespace()  # global (for now) options
 
 AT = namedtuple(
     "AssetType", "description style color tags fields depends prefix"
@@ -179,6 +180,7 @@ LIST_FIELDS = (
 )
 
 LIGHT_THEME = dict(
+    name='light',
     dot_header=[
         "digraph Assets {{",
         '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
@@ -186,10 +188,11 @@ LIGHT_THEME = dict(
         "  node [fontname=FreeSans, fontsize=10]",
         "  edge [fontname=FreeSans, fontsize=10]",
     ],
+    dot_edit_col='#c0c0c0',
     dot_err_col='pink',
 )
 
-DARK_THEME = dict(stroke="#808080", text="#808080")
+DARK_THEME = dict(name='dark', stroke="#808080", text="#808080")
 DARK_THEME.update(
     dict(
         dot_header=[
@@ -203,11 +206,10 @@ DARK_THEME.update(
             f'  edge [fontname=FreeSans, fontsize=10, ',
             f'color="{DARK_THEME["stroke"]}"]',
         ],
+        dot_edit_col='#303030',
         dot_err_col='#200000',
     )
 )
-
-THEME = DARK_THEME
 
 VALIDATORS = defaultdict(lambda: [])
 VALIDATORS_COMPILED = {}  # updated in main()
@@ -306,6 +308,16 @@ def make_parser():
         nargs='+',
         help="One or more asset .yaml files to read",
         metavar="FILE",
+    )
+    parser.add_argument(
+        "--output",
+        help="Output folder",
+        default='asset_inventory',
+    )
+    parser.add_argument(
+        "--theme",
+        help="Color theme to use, 'light' or 'dark'",
+        default='light',
     )
     parser.add_argument(
         "--leaf-type",
@@ -545,6 +557,7 @@ def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
         top="",
         dep_map=dep_map,
         generated=title.split(' updated ')[-1],
+        theme=OPT.theme,
     )
 
     if write:
@@ -555,7 +568,7 @@ def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
     html = template.render(context)
 
     if write:
-        with open(OUTPUT_DIR + '/' + html_filename(asset), 'w') as rep:
+        with open(OPT.output + '/' + html_filename(asset), 'w') as rep:
             rep.write(html)
 
     return html
@@ -568,7 +581,7 @@ def add_missing_deps(assets, other, ans):
             if dep not in other:
                 ans.append(
                     f'  n{len(other)} [label="???", shape=doubleoctagon, '
-                    f'fillcolor="{THEME["dot_err_col"]}", style=filled]'
+                    f'fillcolor="{OPT.theme["dot_err_col"]}", style=filled]'
                 )
                 # used just to display missing asset on graph plot
                 other[dep] = {'name': "???", '_node_id': f"n{len(other)}"}
@@ -617,7 +630,7 @@ def get_tooltip(asset, issues):
 def assets_to_dot(assets, issues, title, top):
     other = {i['id']: i for i in assets}
     edit_linked = set()
-    ans = [i.format(top=top, title=title) for i in THEME["dot_header"]]
+    ans = [i.format(top=top, title=title) for i in OPT.theme["dot_header"]]
 
     add_missing_deps(assets, other, ans)
 
@@ -640,7 +653,7 @@ def assets_to_dot(assets, issues, title, top):
         if asset['id'] in issues:
             if any(i[0] != 'NOTE' for i in issues[asset['id']]):
                 attr['style'] = 'filled'
-                attr['fillcolor'] = THEME["dot_err_col"]
+                attr['fillcolor'] = OPT.theme["dot_err_col"]
         # tooltip dict -> text
         attr['tooltip'] = '\\n'.join(tooltip)
 
@@ -649,7 +662,7 @@ def assets_to_dot(assets, issues, title, top):
 
         # write links to graphviz file, FROM dep TO asset
         for dep in [i for i in asset_dep_ids(asset) if not i.startswith('^')]:
-            attr = dict(fontcolor='#303030')
+            attr = dict(fontcolor=OPT.theme['dot_edit_col'])
             if asset['id'] not in edit_linked:
                 edit_linked.add(asset['id'])
                 attr.update(
@@ -681,10 +694,10 @@ def assets_to_dot(assets, issues, title, top):
 
 def make_asset_key(key, asset):
     """Make node map key images"""
-    ans = [i.format(top='', title='') for i in THEME["dot_header"]]
+    ans = [i.format(top='', title='') for i in OPT.theme["dot_header"]]
     ans += [f"{asset.prefix} [{asset.style}]"]
     ans += ['}']
-    outfile = f"{OUTPUT_DIR}/__{key.replace('/', '-')}"
+    outfile = f"{OPT.output}/__{key.replace('/', '-')}"
     with open(f"{outfile}.dot", 'w') as out:
         out.write('\n'.join(ans))
     os.system(f"dot -Tsvg -o{outfile}.svg {outfile}.dot")
@@ -730,10 +743,11 @@ def write_reports(assets, issues, title, archived):
         issues=issues,
         lookup={i['id']: i for i in assets},
         storage=storage,
+        theme=OPT.theme,
         title=title,
         top='',
     )
-    with open(f"{OUTPUT_DIR}/index.html", 'w') as out:
+    with open(f"{OPT.output}/index.html", 'w') as out:
         out.write(env.get_template("map.html").render(context))
 
     for rep in (
@@ -743,7 +757,7 @@ def write_reports(assets, issues, title, archived):
         'archived',
         'validation',
     ):
-        with open(f"{OUTPUT_DIR}/_{rep}.html", 'w') as out:
+        with open(f"{OPT.output}/_{rep}.html", 'w') as out:
             out.write(env.get_template(f"{rep}.html").render(context))
 
 
@@ -826,17 +840,17 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
     print(f"Showing {len(use)} of {len(assets)} assets for {base}")
 
     top = ''
-    with open(f"{OUTPUT_DIR}/{base}.dot", 'w') as out:
+    with open(f"{OPT.output}/{base}.dot", 'w') as out:
         out.write(assets_to_dot(use, issues, title, top))
 
-    os.system(f"dot -Tsvg -o{OUTPUT_DIR}/{base}.svg {OUTPUT_DIR}/{base}.dot")
+    os.system(f"dot -Tsvg -o{OPT.output}/{base}.svg {OPT.output}/{base}.dot")
 
     generated = title.split(' updated ')[-1]
     subset = 'All assets' if base == 'index' else f'{leads_to} assets only'
     if negate:
         subset = f"Assets not leading to an asset of type {leads_to}"
 
-    svg = open(f"{OUTPUT_DIR}/{base}.svg").read()
+    svg = open(f"{OPT.output}/{base}.svg").read()
     asset_map = asset_to_svg(svg)
     context = dict(
         title=title,
@@ -846,13 +860,16 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
         top=top,
         base=base,
         subset=subset,
+        theme=OPT.theme,
     )
-    with open(f"{OUTPUT_DIR}/{base}.html", 'w') as out:
+    with open(f"{OPT.output}/{base}.html", 'w') as out:
         out.write(get_jinja().get_template("map.html").render(context))
 
 
 def main():
     opt = get_options()
+    OPT.output = opt.output
+    OPT.theme = DARK_THEME if opt.theme == 'dark' else LIGHT_THEME
     assets = []
     for asset_file in chain.from_iterable(opt.assets):
         try:
@@ -870,7 +887,7 @@ def main():
     )
     issues = validate_assets(assets)
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(OPT.output, exist_ok=True)
 
     # add _dependent_types to each asset listing types of all dependents
     propagate_dependent(assets, output='_dependent_types', field='type')

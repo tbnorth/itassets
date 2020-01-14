@@ -53,7 +53,14 @@ code {
   font-size: 75%;
   display: inline-block;
   }
+a {
+  text-decoration: none;
+  }
+a:hover {
+  border-bottom: solid 1px;
+  }
 
+{% if theme.name == 'dark' %}
 body {
   background: black;
   color: #909090;
@@ -73,7 +80,6 @@ hr {
   }
 a {
   color: #00b000;
-  text-decoration: none;
   /* border-bottom: dotted 1px; */
   }
 a:visited {
@@ -81,8 +87,8 @@ a:visited {
   }
 a:hover {
   color: #00b000;
-  border-bottom: solid 1px;
   }
+{% endif %}
 
 </style>
 {% block extrahead %}
