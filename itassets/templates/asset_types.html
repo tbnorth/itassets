@@ -2,7 +2,7 @@
 {% block content %}{{super()}}
 <p>In addtion to the <a href="{{top}}index.html">map of everything</a> and the
 individual asset type maps linked below, there's a
-<a href="{{top}}asset_reports/_unapplied.html">map of things not used by applications</a>.
+<a href="{{top}}_unapplied.html">map of things not used by applications</a>.
 </p>
 {% for at in asset_types %}
 <h3>{{at.id}} <span class="prefix">{{at.prefix}}_</span></h3>
@@ -10,7 +10,7 @@ individual asset type maps linked below, there's a
 <div>Depends on: <code>{{at.depends}}</code></div>
 <div>Required fields: <code>{{at.fields}}</code></div>
 <div>Tags: <code>{{at.tags}}</code></div>
-<div>See [<a href="{{top}}asset_reports/_{{at.id|replace("/", "_")}}.html">{{at.id}} map</a>]</div>
+<div>See [<a href="{{top}}_{{at.id|replace("/", "_")}}.html">{{at.id}} map</a>]</div>
 {% endfor %}
 {% endblock %}
 

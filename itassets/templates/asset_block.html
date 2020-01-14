@@ -37,7 +37,7 @@
 <div>
 [<a href="{{edit_url}}">edit</a>]
 [<a href="_{{asset.type|replace('/','_')}}.html">all {{asset.type}} assets</a>]
-{% if asset.type.startswith('application/') %}
+{% if dep_map and asset.type.startswith('application/') %}
 [<a href="_{{asset.id}}.html">dependency map</a>]
 {% endif %}
 </div>

@@ -479,11 +479,11 @@ def link_links(text):
 
 def html_filename(asset):
     try:
-        fn = asset.get('name', asset['id']).replace('/', '-')
+        fn = asset.get('name', asset['id']).replace('/', '-').replace('?', '-')
     except Exception:
         print(asset)
         raise
-    return OUTPUT_DIR + '/' + '_'.join(fn.split()) + '.html'
+    return '_'.join(fn.split()) + '.html'
 
 
 def edit_url(asset):
@@ -492,7 +492,7 @@ def edit_url(asset):
     return f"itas://{asset['file_data']['file_path']}#{asset['id']}"
 
 
-def report_to_html(asset, lookup, issues, title, write=True):
+def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
     keys = {
         k: link_links(asset[k])
         for k in asset
@@ -542,7 +542,8 @@ def report_to_html(asset, lookup, issues, title, write=True):
         lists=lists,
         dependencies=dependencies,
         dependents=dependents,
-        top="../",
+        top=f"../{OUTPUT_DIR}/",
+        dep_map=dep_map,
         generated=title.split(' updated ')[-1],
     )
 
@@ -554,7 +555,7 @@ def report_to_html(asset, lookup, issues, title, write=True):
     html = template.render(context)
 
     if write:
-        with open(html_filename(asset), 'w') as rep:
+        with open(OUTPUT_DIR + '/' + html_filename(asset), 'w') as rep:
             rep.write(html)
 
     return html
@@ -619,7 +620,6 @@ def assets_to_dot(assets, issues, title, top):
     ans = [i.format(top=top, title=title) for i in THEME["dot_header"]]
 
     add_missing_deps(assets, other, ans)
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     for _node_id, asset in enumerate(assets):
         asset['_node_id'] = f"n{_node_id}"
@@ -690,7 +690,8 @@ def write_reports(assets, issues, title, archived):
     archived.sort(key=lambda x: x['name'])
     lookup = {i['id']: i for i in assets}
     archived = [
-        report_to_html(i, lookup, issues, title, write=False) for i in archived
+        report_to_html(i, lookup, issues, title, write=False, dep_map=False)
+        for i in archived
     ]
     for asset in assets:
         asset['_reppath'] = html_filename(asset)
@@ -702,18 +703,16 @@ def write_reports(assets, issues, title, archived):
         asset_types[-1]['id'] = key
     context = dict(
         title=title,
-        imap=open("assets.map").read(),
         generated=generated,
-        top='./',
+        top=f'../{OUTPUT_DIR}/',
         applications=applications,
         storage=storage,
         asset_types=asset_types,
         archived=archived,
     )
-    with open("index.html", 'w') as out:
+    with open(f"{OUTPUT_DIR}/index.html", 'w') as out:
         out.write(env.get_template("map.html").render(context))
 
-    context['top'] = '../'
     for rep in 'asset_types', 'storage', 'applications', 'archived':
         with open(f"{OUTPUT_DIR}/_{rep}.html", 'w') as out:
             out.write(env.get_template(f"{rep}.html").render(context))
@@ -730,7 +729,7 @@ def write_maps(assets, issues, title):
         in_field="_dependent_types",
     )
     write_map(
-        base=f"{OUTPUT_DIR}/_unapplied",
+        base=f"_unapplied",
         assets=assets,
         issues=issues,
         title=title,
@@ -740,7 +739,7 @@ def write_maps(assets, issues, title):
     )
     for type_ in ASSET_TYPE:
         write_map(
-            base=f"{OUTPUT_DIR}/_" + type_.replace('/', '_'),
+            base=f"_" + type_.replace('/', '_'),
             assets=assets,
             issues=issues,
             title=title,
@@ -749,7 +748,7 @@ def write_maps(assets, issues, title):
         )
     for app in [i for i in assets if i['type'].startswith('application/')]:
         write_map(
-            base=f"{OUTPUT_DIR}/_" + app['id'],
+            base=f"_" + app['id'],
             assets=assets,
             issues=issues,
             title=title,
@@ -797,18 +796,18 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
 
     print(f"Showing {len(use)} of {len(assets)} assets for {base}")
 
-    top = './' if base == 'index' else '../'
-    with open(base + ".dot", 'w') as out:
+    top = f'../{OUTPUT_DIR}/'
+    with open(f"{OUTPUT_DIR}/{base}.dot", 'w') as out:
         out.write(assets_to_dot(use, issues, title, top))
 
-    os.system(f"dot -Tsvg -o{base}.svg {base}.dot")
+    os.system(f"dot -Tsvg -o{OUTPUT_DIR}/{base}.svg {OUTPUT_DIR}/{base}.dot")
 
     generated = title.split(' updated ')[-1]
     subset = 'All assets' if base == 'index' else f'{leads_to} assets only'
     if negate:
         subset = f"Assets not leading to an asset of type {leads_to}"
 
-    svg = open(f"{base}.svg").read()
+    svg = open(f"{OUTPUT_DIR}/{base}.svg").read()
     asset_map = asset_to_svg(svg)
     context = dict(
         title=title,
@@ -819,7 +818,7 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
         base=base,
         subset=subset,
     )
-    with open(f"{base}.html", 'w') as out:
+    with open(f"{OUTPUT_DIR}/{base}.html", 'w') as out:
         out.write(get_jinja().get_template("map.html").render(context))
 
 
