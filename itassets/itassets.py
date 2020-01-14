@@ -10,7 +10,7 @@ from lxml import etree
 import jinja2
 import yaml
 
-OUTPUT_DIR = 'asset_reports'
+OUTPUT_DIR = 'asset_inventory'
 
 AT = namedtuple(
     "AssetType", "description style color tags fields depends prefix"
@@ -542,7 +542,7 @@ def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
         lists=lists,
         dependencies=dependencies,
         dependents=dependents,
-        top=f"../{OUTPUT_DIR}/",
+        top="",
         dep_map=dep_map,
         generated=title.split(' updated ')[-1],
     )
@@ -695,25 +695,42 @@ def write_reports(assets, issues, title, archived):
     ]
     for asset in assets:
         asset['_reppath'] = html_filename(asset)
+        asset['_edit_url'] = edit_url(asset)
         if asset['id'] in issues:
             asset['_class'] = 'issues'
     asset_types = []
     for key, asset in ASSET_TYPE.items():
         asset_types.append(asset._asdict())
         asset_types[-1]['id'] = key
+    # types of issues
+    issue_counts = set(j[0] for i in issues.values() for j in i)
+    # count of each type
+    issue_counts = {
+        i: len([j for k in issues.values() for j in k if j[0] == i])
+        for i in issue_counts
+    }
     context = dict(
-        title=title,
-        generated=generated,
-        top=f'../{OUTPUT_DIR}/',
         applications=applications,
-        storage=storage,
-        asset_types=asset_types,
         archived=archived,
+        asset_types=asset_types,
+        generated=generated,
+        issue_counts=sorted((k, v) for k, v in issue_counts.items()),
+        issues=issues,
+        lookup={i['id']: i for i in assets},
+        storage=storage,
+        title=title,
+        top='',
     )
     with open(f"{OUTPUT_DIR}/index.html", 'w') as out:
         out.write(env.get_template("map.html").render(context))
 
-    for rep in 'asset_types', 'storage', 'applications', 'archived':
+    for rep in (
+        'asset_types',
+        'storage',
+        'applications',
+        'archived',
+        'validation',
+    ):
         with open(f"{OUTPUT_DIR}/_{rep}.html", 'w') as out:
             out.write(env.get_template(f"{rep}.html").render(context))
 
@@ -796,7 +813,7 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
 
     print(f"Showing {len(use)} of {len(assets)} assets for {base}")
 
-    top = f'../{OUTPUT_DIR}/'
+    top = ''
     with open(f"{OUTPUT_DIR}/{base}.dot", 'w') as out:
         out.write(assets_to_dot(use, issues, title, top))
 

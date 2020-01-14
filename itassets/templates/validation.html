@@ -1,0 +1,27 @@
+{% extends "index.html" %}
+{% block content %}{{super()}}
+{% if issues %}
+<h4>Validation types</h4>
+{% for k, v in issue_counts %}
+<div><span class='validation_type'>{{k}}</span> {{v}}</div>
+{% endfor %}
+<h4>Validation issues</h4>
+{% for issue in issues %}
+{% set asset = lookup[issue] %}
+<div class='issue'>
+<div>
+{{issue}} {{asset.name}}
+<a target="_def_{{asset.id}}" href="{{top}}{{asset._reppath}}">def</a>
+<a  href="{{asset._edit_url}}">edit</a>
+<a target="_map" href="{{top}}index.html#{{asset.id}}">map</a>
+</div>
+{% for line in issues[issue] %}
+<div><span class='validation_type'>{{line[0]}}</span> {{line[1]}}</div>
+{% endfor %}
+</div>
+{% endfor %}
+{% else %}
+<p>No validation issues found.</p>
+{% endif %}
+{% endblock %}
+
