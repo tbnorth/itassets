@@ -310,9 +310,7 @@ def make_parser():
         metavar="FILE",
     )
     parser.add_argument(
-        "--output",
-        help="Output folder",
-        default='asset_inventory',
+        "--output", help="Output folder", default='asset_inventory'
     )
     parser.add_argument(
         "--theme",
@@ -863,8 +861,7 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
         out.write(get_jinja().get_template("map.html").render(context))
 
 
-def main():
-    opt = get_options()
+def do_commandline(opt):
     OPT.output = opt.output
     OPT.theme = DARK_THEME if opt.theme == 'dark' else LIGHT_THEME
     assets = []
@@ -920,6 +917,10 @@ def main():
         print(f"Showing {len(assets)} of {n} assets")
 
     write_maps(assets, issues, title)
+
+
+def main():
+    do_commandline(get_options())
 
 
 if __name__ == "__main__":
