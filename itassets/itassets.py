@@ -706,11 +706,11 @@ def write_reports(assets, issues, title, archived):
     storage.sort(key=lambda x: x['location'])
     archived.sort(key=lambda x: x['name'])
     lookup = {i['id']: i for i in assets}
-    archived = [
+    archived_listings = [
         report_to_html(i, lookup, issues, title, write=False, dep_map=False)
         for i in archived
     ]
-    for asset in assets:
+    for asset in assets + archived:
         asset['_reppath'] = html_filename(asset)
         asset['_edit_url'] = edit_url(asset)
         if asset['id'] in issues:
@@ -730,6 +730,7 @@ def write_reports(assets, issues, title, archived):
     context = dict(
         applications=applications,
         archived=archived,
+        archived_listings=archived_listings,
         assets=assets,
         asset_types=asset_types,
         generated=generated,
@@ -897,6 +898,8 @@ def do_commandline(opt):
         report_to_html(asset, lookup, issues, title)
     for asset in archived:
         asset.setdefault('_dependents', [])  # even these
+    for asset in archived:
+        report_to_html(asset, lookup, issues, title)
 
     write_reports(assets, issues, title, archived)
 

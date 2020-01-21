@@ -1,5 +1,6 @@
 <div class='asset'>
 <h2>{{asset.id}}: {{asset.name}}</h2>
+{% if 'archived' in asset.tags %}<h3>*** NOTICE: this asset is archived ***</h3>{% endif %}
 {% for type_, reason in issues %}
 <div class='issue'><span class='issue_key'><span class='issue_{{type_}}'>{{type_}}:</span></span>
 <span class='issue_val'>{{reason}}</span></div>
