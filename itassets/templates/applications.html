@@ -9,6 +9,7 @@ the map link.</p>
   <th></th>
   <th></th>
   <th></th>
+  <th></th>
   <th>Type</th>
   <th>Name</th>
   <th>Description</th>
@@ -16,6 +17,7 @@ the map link.</p>
 </tr>
 {% for app in applications %}
 <tr class="{{loop.cycle('odd','odd','odd','even','even','even')}}">
+        <td class='hide'><a target="_def_{{app.id}}" href="{{app._edit_url}}">edit</a></td>
 <td class='hide'><a target="_def_{{app.id}}" href="{{top}}{{app._reppath}}">def</a></td>
 <td class='hide'><a target="_def_{{app.id}}" href="{{top}}_{{app.id}}.html">deps</a></td>
 <td class='hide'><a target="_map" href="{{top}}index.html#{{app.id}}">map</a></td>
