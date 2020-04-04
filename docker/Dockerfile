@@ -2,7 +2,7 @@ FROM alpine
 
 RUN apk update \
  && apk upgrade \
- && apk add graphviz ttf-freefont py3-jinja2 py3-lxml py-pip \
+ && apk add git graphviz ttf-freefont py3-jinja2 py3-lxml py-pip \
  && pip3 install pyyaml
 
 COPY run_itassets.py monitor.py ./itassets /itassets/
