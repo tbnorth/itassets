@@ -19,12 +19,12 @@ class MyHandler(BaseHTTPRequestHandler):
         # print(data)
         data = json.loads(data)
         # print(data)
-        cmd = ['git', '-C', '/inputs', 'rev-parse', '--abbrev-ref', 'HEAD']
+        cmd = ['git', '-C', '/repo', 'rev-parse', '--abbrev-ref', 'HEAD']
         cmd = subprocess.Popen(cmd, stdout=subprocess.PIPE)
         branch, err = cmd.communicate()
         branch = branch.decode('utf-8').strip()
         print(f"Got post, monitoring {branch}")
-        cmd = ['git', '-C', '/inputs', 'pull']
+        cmd = ['git', '-C', '/repo', 'pull']
         cmd = subprocess.Popen(cmd)
         out, err = cmd.communicate()
         update("/inputs/*.yaml")

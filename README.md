@@ -85,18 +85,19 @@ the database on a GitHub / GitHub-Enterprise site.  The docker container can be
 started like this:
 ```
 sudo docker run -d -p 8181:8000 \
-    -v /some/path1/asset_repo/assets:/inputs \
+    -v /some/path0/asset_repo/repo \
+    -v /some/path1/asset_repo/assets_yml:/inputs \
     -v /some/path2:/outputs \
     -v /some/path3/ssh:/root/.ssh \
     tbnorth/itassets:latest python3 /itassets/monitor.py
 ```
 The `python3 /itassets/monitor.py` at the end is needed to run in continuous
 monitoring mode rather than the immediate command-line mode shown above.  The
-`/inputs` and `/outputs` volumes function as before, but additionally the
-`/inputs` volume should be a directory in a checkout of the repo. containing
-the asset data.  The container will attempt `git pull` in that folder when it
-hears there's been an update.  Internally the container listens for a POST
-command on port 8000, here host port 8181 is mapped to that.
+`/inputs` and `/outputs` volumes function as before.  The
+`/repo` volume should be the root directory of a checkout of the repo.
+containing the asset data.  The container will attempt `git pull` in that
+directory when it hears there's been an update.  Internally the container listens
+for a POST command on port 8000, here host port 8181 is mapped to that.
 
 The other two steps in setting up this mode are:
 
