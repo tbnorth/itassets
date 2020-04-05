@@ -5,6 +5,7 @@ Terry N. Brown terrynbrown@gmail.com Sat 04 Apr 2020 09:30:09 PM NZDT
 """
 
 import json
+import os
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -25,7 +26,9 @@ class MyHandler(BaseHTTPRequestHandler):
         branch = branch.decode('utf-8').strip()
         print(f"Got post, monitoring {branch}")
         cmd = ['git', '-C', '/repo', 'pull']
-        cmd = subprocess.Popen(cmd)
+        env = dict(os.environ)
+        env['GIT_SSH_COMMAND'] = 'ssh -o StrictHostKeyChecking=no'
+        cmd = subprocess.Popen(cmd, env=env)
         out, err = cmd.communicate()
         update("/inputs/*.yaml")
 
