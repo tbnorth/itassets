@@ -77,6 +77,64 @@ then view index.html in your browser.  [docker/head.html](./docker/head.html)
 and [docker/tail.html](./docker/tail.html) are just minimal HTML snippets to
 apply the image link map to the image.
 
+## Running in response to GitHub webhooks
+
+This is more complicated to set up but allows regeneration of the web view of
+the asset database in response to a push to a GitHub repo., or even editing of
+the database on a GitHub / GitHub-Enterprise site.  The docker container can be
+started like this:
+```
+sudo docker run -d -p 8181:8000 \
+    -v /some/path1/asset_repo/assets:/inputs \
+    -v /some/path2:/outputs \
+    -v /some/path3/ssh:/root/.ssh \
+    tbnorth/itassets:latest python3 /itassets/monitor.py
+```
+The `python3 /itassets/monitor.py` at the end is needed to run in continuous
+monitoring mode rather than the immediate command-line mode shown above.  The
+`/inputs` and `/outputs` volumes function as before, but additionally the
+`/inputs` volume should be a directory in a checkout of the repo. containing
+the asset data.  The container will attempt `git pull` in that folder when it
+hears there's been an update.  Internally the container listens for a POST
+command on port 8000, here host port 8181 is mapped to that.
+
+The other two steps in setting up this mode are:
+
+### Setting up the webhook on the repository
+
+This is done in the GitHub(Enterprise) web UI.  Set the `push` event to send a
+`JSON` notification to an URL that will reach the docker container.  For
+example `http://example.com/hooks/asset_update` might be proxied to local port
+8181 with something like (Apache):
+```
+<VirtualHost *:80>
+    # commits to https://github.com/username/project trigger a POST
+    # to http://example.com/hooks/asset_update
+    ProxyPreserveHost On
+    ProxyRequests Off
+    ProxyPass /hooks/asset_update http://127.0.0.1:8181/
+    ProxyPassReverse /hooks/asset_update http://127.0.0.1:8181/
+</VirtualHost>
+```
+
+### Making the repo. pullable by the container
+
+Depending on the access restrictions on your repo., you may have to take
+special steps to allow the container to pull from it when the hook fires and
+tells the container there's been a push.
+
+One approach is to generate an ssh key pair:
+```
+mkdir ssh
+cd ssh
+ssh-keygen -f ./id_rsa
+# don't use a pass phrase, it needs to be used non-interactively
+```
+then add this key (the `id_rsa.pub` file content) as a Deploy Key for the repo.
+using the GitHub web UI (read only is fine), and make this key available to
+the container as seen with the `-v /some/path3/ssh:/root/.ssh` in the above
+example.
+
 ## Special conventions
 
 ### Archived tag
