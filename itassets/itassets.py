@@ -522,6 +522,12 @@ def edit_url(asset):
     return f"itas://{asset['file_data']['file_path']}#{asset['id']}"
 
 
+def dep_types(asset):
+    """list of short types of immediate dependencies"""
+    deps = [i for i in asset_dep_ids(asset) if not i.startswith('^')]
+    return [i.split('_')[0] for i in deps]
+
+
 def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
     """Generate HTML describing asset, possibly write to file"""
     keys = {
@@ -746,11 +752,6 @@ def write_reports(assets, issues, title, archived):
         report_to_html(i, lookup, issues, title, write=False, dep_map=False)
         for i in archived
     ]
-    for asset in assets + archived:
-        asset['_reppath'] = html_filename(asset)
-        asset['_edit_url'] = edit_url(asset)
-        if asset['id'] in issues:
-            asset['_class'] = 'issues'
     asset_types = []
     for key, asset in ASSET_TYPE.items():
         asset_types.append(asset._asdict())
@@ -930,6 +931,12 @@ def prep_assets(opt):
         {re.compile(k): v for k, v in VALIDATORS.items()}
     )
     issues = validate_assets(assets)
+    for asset in assets + archived:
+        asset['_reppath'] = html_filename(asset)
+        asset['_edit_url'] = edit_url(asset)
+        asset['_dep_types'] = dep_types(asset)
+        if asset['id'] in issues:
+            asset['_class'] = 'issues'
 
     # add _dependent_types to each asset listing types of all dependents
     propagate_dependent(assets, output='_dependent_types', field='type')

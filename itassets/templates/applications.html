@@ -8,6 +8,7 @@ the map link.</p>
 <tr>
   <th>Type</th>
   <th>Name</th>
+  <th>On</th>
   <th>Description</th>
   <th>Link</th>
 </tr>
@@ -22,6 +23,7 @@ the map link.</p>
 </div>
 </td>
 <td><span class='{{app._class}}'>{{app.name}}</span></td>
+<td>{{app._dep_types|unique|join(' ')}}</td>
 <td>{{app.description}}</td>
 <td><a target="_{{app.id}}" href="{{app.location}}">{{app.location}}</a></td>
 </tr>
