@@ -216,11 +216,20 @@ VALIDATORS_COMPILED = {}  # updated in main()
 
 
 def validator(type_):
+    """Validator functions get (asset, lookup, dependents) params.
+    This decorator takes a regex that matches validators against asset
+    `type` attributes, e.g. "vm/virtualbox" could be matched with "^vm/.*"
+
+    Note: 2020-04-13, only '.*' used i.e. all validators apply to all asset
+    types, but retain for now - needed to build list of validators anyway.
+    """
     def add_validator(function, type_=type_):
         VALIDATORS[type_].append(function)
 
     return add_validator
 
+
+# Validator functions, may yield one or more errors / warnings
 
 # do this first, as it may explain subsequent KeyErrors
 @validator('.*')
@@ -232,6 +241,7 @@ def known_asset_type(asset, lookup, dependents):
 @validator('.*')
 def no_undef_depends(asset, lookup, dependents):
     for dep in asset_dep_ids(asset):
+        # standard dependencies can be excluded with ^ syntax, see README
         if dep not in lookup and not dep.startswith('^'):
             yield 'WARNING', f"Depends on undefined asset ID={dep}"
 
@@ -283,6 +293,7 @@ def check_fields(asset, lookup, dependents):
 
 @validator('.*')
 def check_depends(asset, lookup, dependents):
+    """Check asset lists dependencies specified in its definition"""
     type_ = asset['type']
     for dep in ASSET_TYPE[type_].depends:
         if '^' + dep in asset_dep_ids(asset):
@@ -354,11 +365,17 @@ def get_options(args=None):
 
 
 def get_jinja():
+    """Get Jinja environment for rendering templates"""
     path = os.path.join(os.path.dirname(__file__), 'templates')
     return jinja2.Environment(loader=jinja2.FileSystemLoader([path]))
 
 
 def load_assets(asset_file):
+    """Load YAML data
+
+    Returns list of assets, adds link from each asset to dict representing
+    whole file.
+    """
     file_data = yaml.safe_load(open(asset_file))
     if not file_data:
         return []
@@ -369,7 +386,7 @@ def load_assets(asset_file):
 
 
 def general_info(assets):
-    """Search the assets for a general section"""
+    """Search the assets for a general section, used for overall title"""
     for asset in assets:
         try:
             return asset['file_data']['general']
@@ -379,6 +396,7 @@ def general_info(assets):
 
 
 def validate_assets(assets):
+    """Print validation errors and return mapping from asset to errors"""
     seen = {}
     dependents = defaultdict(lambda: [])
     failures = {}
@@ -401,12 +419,14 @@ def validate_assets(assets):
     if duplicate_IDs:
         raise Exception("Can't continue with duplicate IDs present")
 
+    # apply validation functions to each asset
     for asset in assets:
         issues = [('UNKNOWN', 'FAILURE')]
         # Having something on this list makes sure the finally clause prints
         # something to incriminate the failing asset if there's an exception
         # before anything's added to issues.
         try:
+            # all validators matching asset type
             for pattern, validators in VALIDATORS_COMPILED.items():
                 if pattern.search(asset.get('type', 'NOT-SPECIFIED')):
                     for validator in validators:
@@ -444,6 +464,7 @@ def propagate_dependent(assets, output='_dependent_types', field='type'):
 
 
 def node_dot(id_, attr):
+    """Format graphviz dot node definition"""
     return "  {id} [{attrs}]".format(
         id=id_,
         attrs=', '.join(
@@ -473,6 +494,7 @@ def dot_node_name(text):
 
 
 def link_links(text):
+    """Add <a/> elements in output for http://... text in notes etc."""
     lines = text.split('\n')
     for line_i, line in enumerate(lines):
         lines[line_i] = line.replace('<', '&lt;')
@@ -488,16 +510,19 @@ def link_links(text):
 
 
 def html_filename(asset):
+    """Name of .html file containing info. on asset"""
     return '_'.join(asset['id'].split()) + '.html'
 
 
 def edit_url(asset):
+    """URL (custom protocol) for invoking editor for asset definition"""
     if not asset.get('file_data'):
         return None  # a node for an undefined dependency
     return f"itas://{asset['file_data']['file_path']}#{asset['id']}"
 
 
 def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
+    """Generate HTML describing asset, possibly write to file"""
     keys = {
         k: link_links(asset[k])
         for k in asset
@@ -568,6 +593,9 @@ def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
 
 
 def add_missing_deps(assets, other, ans):
+    """Show missing asset definitions in graph (i.e. referenced by ID as a
+    dependency but not defined
+    """
     for asset in assets:
         real_deps = [i for i in asset_dep_ids(asset) if not i.startswith('^')]
         for dep in real_deps:
@@ -581,6 +609,8 @@ def add_missing_deps(assets, other, ans):
 
 
 def asset_dep_ids(asset, insufficient=False):
+    """Get list of dependencies, see README for INSUF convention, trailing
+    text split off as it's just commentary"""
     return [
         i.split()[0]
         for i in asset.get('depends_on', [])
@@ -589,6 +619,7 @@ def asset_dep_ids(asset, insufficient=False):
 
 
 def get_title(assets):
+    """Overall title from a `general` section, plus time"""
     ttl = general_info(assets)
     if ttl:
         ttl = ttl['title']
@@ -598,6 +629,7 @@ def get_title(assets):
 
 
 def get_tooltip(asset, issues):
+    """Hover text in graph view, describes asset"""
     tooltip = []
     # add validation issues to top of tooltip
     tooltip += ["%s %s" % (i, j) for i, j in issues.get(asset['id'], [])]
@@ -621,6 +653,7 @@ def get_tooltip(asset, issues):
 
 
 def assets_to_dot(assets, issues, title, top):
+    """Return graphviz dot format text describing assets"""
     other = {i['id']: i for i in assets}
     edit_linked = set()
     ans = [i.format(top=top, title=title) for i in OPT.theme["dot_header"]]
@@ -686,7 +719,7 @@ def assets_to_dot(assets, issues, title, top):
 
 
 def make_asset_key(key, asset):
-    """Make node map key images"""
+    """Make node map key images in SVG (rectangle, diamond, etc.)"""
     ans = [i.format(top='', title='') for i in OPT.theme["dot_header"]]
     ans += [f"{asset.prefix} [{asset.style}]"]
     ans += ['}']
@@ -697,7 +730,9 @@ def make_asset_key(key, asset):
 
 
 def write_reports(assets, issues, title, archived):
-
+    """~Query data to make common context for generating various reports,
+    and write HTML reports via templates
+    """
     env = get_jinja()
     generated = title.split(' updated ')[-1]
     applications = [i for i in assets if i['type'].startswith('application/')]
@@ -758,7 +793,8 @@ def write_reports(assets, issues, title, archived):
 
 
 def write_maps(assets, issues, title):
-
+    """Use graphviz dot to make SVG graphs / maps"""
+    # main graph of everything
     write_map(
         base="index",
         assets=assets,
@@ -767,6 +803,7 @@ def write_maps(assets, issues, title):
         leads_to=".*",
         in_field="_dependent_types",
     )
+    # assets not leading to applications
     write_map(
         base=f"_unapplied",
         assets=assets,
@@ -776,6 +813,7 @@ def write_maps(assets, issues, title):
         in_field="_dependent_types",
         negate=True,
     )
+    # maps of all assets of a particular type, shows their dependencies
     for type_ in ASSET_TYPE:
         write_map(
             base=f"_" + type_.replace('/', '_'),
@@ -785,6 +823,7 @@ def write_maps(assets, issues, title):
             leads_to=type_,
             in_field="_dependent_types",
         )
+    # individual maps for each application showing dependencies
     for app in [i for i in assets if i['type'].startswith('application/')]:
         write_map(
             base=f"_" + app['id'],
@@ -797,7 +836,10 @@ def write_maps(assets, issues, title):
 
 
 def asset_to_svg(svg):
-    """get a mapping from asset IDs to svg node IDs"""
+    """get a mapping from asset IDs to svg node IDs
+
+    graphviz dot doesn't use the supplied node ID as the SVG ID
+    """
     dom = etree.fromstring(svg.encode('utf-8'))
     nodes = dom.xpath(
         "//svg:g[@id='graph0']/svg:g",
@@ -815,7 +857,7 @@ def asset_to_svg(svg):
 
 
 def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
-
+    """Output HTML containing SVG graph of assets, see write_maps()"""
     use = [
         i
         for i in assets
@@ -862,7 +904,8 @@ def write_map(base, assets, issues, title, leads_to, in_field, negate=False):
         out.write(get_jinja().get_template("map.html").render(context))
 
 
-def do_commandline(opt):
+def generate_all(opt):
+    """Generate all outputs based on command line options"""
     OPT.output = opt.output
     OPT.theme = DARK_THEME if opt.theme == 'dark' else LIGHT_THEME
     assets = []
@@ -923,7 +966,7 @@ def do_commandline(opt):
 
 
 def main():
-    do_commandline(get_options())
+    generate_all(get_options())
 
 
 if __name__ == "__main__":
