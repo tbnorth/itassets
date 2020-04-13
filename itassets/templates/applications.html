@@ -6,22 +6,21 @@ mean there are no issues with the application's dependencies, check
 the map link.</p>
 <table>
 <tr>
-  <th></th>
-  <th></th>
-  <th></th>
-  <th></th>
   <th>Type</th>
   <th>Name</th>
   <th>Description</th>
   <th>Link</th>
 </tr>
 {% for app in applications %}
-<tr class="{{loop.cycle('odd','odd','odd','even','even','even')}}">
-        <td class='hide'><a target="_def_{{app.id}}" href="{{app._edit_url}}">edit</a></td>
-<td class='hide'><a target="_def_{{app.id}}" href="{{top}}{{app._reppath}}">def</a></td>
-<td class='hide'><a target="_def_{{app.id}}" href="{{top}}_{{app.id}}.html">deps</a></td>
-<td class='hide'><a target="_map" href="{{top}}index.html#{{app.id}}">map</a></td>
-<td>{{(app.type.split('/'))[1]}}</td>
+<tr class="ctrl_wrapper {{loop.cycle('odd','odd','odd','even','even','even')}}">
+<td>{{(app.type.split('/'))[1]}}
+<div class="ctrl_content">
+<a target="_def_{{app.id}}" href="{{app._edit_url}}">edit</a>
+<a target="_def_{{app.id}}" href="{{top}}{{app._reppath}}">def</a>
+<a target="_def_{{app.id}}" href="{{top}}_{{app.id}}.html">deps</a>
+<a target="_map" href="{{top}}index.html#{{app.id}}">map</a>
+</div>
+</td>
 <td><span class='{{app._class}}'>{{app.name}}</span></td>
 <td>{{app.description}}</td>
 <td><a target="_{{app.id}}" href="{{app.location}}">{{app.location}}</a></td>

@@ -1,11 +1,14 @@
 <table>
 {% for asset in assets %}
-<tr class="{{loop.cycle('odd','odd','odd','even','even','even')}}">
-<td class='hide'><a target="_def_{{asset.id}}" href="{{top}}{{asset._reppath}}">def</a></td>
-{% if not prefix %}<td class='hide'><a target="_map" href="{{top}}index.html#{{asset.id}}">map</a></td>{% endif %}
-<td class='hide'><a href="{{asset._edit_url}}">edit</a></td>
+<tr class="ctrl_wrapper {{loop.cycle('odd','odd','odd','even','even','even')}}">
 {{prefix}}
-<td><span class='{{asset._class}}'>{{asset.id}}</span></td>
+<td><span class='{{asset._class}}'>{{asset.id}}</span>
+<div class="ctrl_content">        
+<a target="_def_{{asset.id}}" href="{{top}}{{asset._reppath}}">def</a>
+{% if not prefix %}<a target="_map" href="{{top}}index.html#{{asset.id}}">map</a>{% endif %}
+<a href="{{asset._edit_url}}">edit</a>
+</div>
+</td>
 <td>{{asset.name}}</td>
 <td>{{asset.description}}</td>
 <td>{{asset.type}}</td>

@@ -67,7 +67,7 @@ tr.even {
   background: #f0f0f0;
   }
 tr:hover {
-  font-weight: bold;
+  // font-weight: bold;
   font-style: italic;
   }
 tr td.hide a {
@@ -76,6 +76,18 @@ tr td.hide a {
 tr:hover td.hide a {
   color: blue;
   }
+.ctrl_wrapper {
+  position: relative;        
+}
+.ctrl_wrapper:hover .ctrl_content {
+  display: block;
+}
+.ctrl_content {
+  display: none;
+  position: absolute;
+  background: white;
+}
+
 
 {% if theme.name == 'dark' %}
 body {
@@ -111,6 +123,9 @@ tr.even {
 tr:hover td.hide a {
   color: #00b000;
   }
+.ctrl_content {
+  background: black;
+}
 {% endif %}
 
 </style>
