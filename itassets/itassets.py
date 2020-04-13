@@ -223,6 +223,7 @@ def validator(type_):
     Note: 2020-04-13, only '.*' used i.e. all validators apply to all asset
     types, but retain for now - needed to build list of validators anyway.
     """
+
     def add_validator(function, type_=type_):
         VALIDATORS[type_].append(function)
 
@@ -908,6 +909,11 @@ def generate_all(opt):
     """Generate all outputs based on command line options"""
     OPT.output = opt.output
     OPT.theme = DARK_THEME if opt.theme == 'dark' else LIGHT_THEME
+    assets, archived, lookup, issues = prep_assets(opt)
+    generate_outputs(opt, assets, archived, lookup, issues)
+
+
+def prep_assets(opt):
     assets = []
     for asset_file in chain.from_iterable(opt.assets):
         try:
@@ -925,18 +931,23 @@ def generate_all(opt):
     )
     issues = validate_assets(assets)
 
-    os.makedirs(OPT.output, exist_ok=True)
-
     # add _dependent_types to each asset listing types of all dependents
     propagate_dependent(assets, output='_dependent_types', field='type')
     propagate_dependent(assets, output='_dependent_ids', field='id')
     lookup = {i['id']: i for i in assets}
-    title = get_title(assets)
     for asset in assets:
         asset.setdefault('_dependents', [])  # so they all have it
         for dep in asset_dep_ids(asset):
             if dep in lookup:
                 lookup[dep].setdefault('_dependents', []).append(asset['id'])
+
+    return assets, archived, lookup, issues
+
+
+def generate_outputs(opt, assets, archived, lookup, issues):
+
+    title = get_title(assets)
+    os.makedirs(OPT.output, exist_ok=True)
     for asset in assets:  # after all dependents recorded
         report_to_html(asset, lookup, issues, title)
     for asset in archived:
