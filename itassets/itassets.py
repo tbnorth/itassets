@@ -109,8 +109,9 @@ ASSET_TYPE = {
         [],
         'srv',
     ),
+    # e.g. a non-containerized Django app., c.f. /infrastructure variant below
     'physical/server/service': AT(
-        "A service (web-server, RDMS) running directly"
+        "A service (Django, web app. etc.) running directly"
         " on a physical server",
         'shape=pentagon, width=1.25',
         'pink',
@@ -119,6 +120,7 @@ ASSET_TYPE = {
         ['physical/server', 'resource/deployment', 'storage/.*'],
         'psvc',
     ),
+    # /infrastructure denotes the "core" HTTP etc. service on a server
     'physical/server/service/infrastructure': AT(
         "A service (web-server, RDMS) running directly"
         " on a physical server",
@@ -130,7 +132,7 @@ ASSET_TYPE = {
         'psvc',
     ),
     'resource/deployment': AT(
-        "The source / deplpoyment resource for an asset, "
+        "The source / deployment resource for an asset, "
         "e.g. the Dockerfile for a Docker image",
         'shape=note, width=1.5',
         'cyan',
