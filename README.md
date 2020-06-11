@@ -232,3 +232,17 @@ xdg-mime default itas.desktop x-scheme-handler/itas
 `open-itas.sh` opens the definition in a running instance of vim, but could be
 modified for other editors.
 
+If you're using a docker container to generate the inventory, the path may
+be incorrect, e.g.
+```
+itas:///inputs/storage.yaml#drv_alt_gisbu_n0
+```
+instead of
+```
+itas:///home/me/repos/myInfrastructure/assets/storage.yaml#drv_alt_gisbu_n0
+```
+You can add a line to `open-itas.sh` like:
+```shell
+FILE=$(echo "$FILE"|sed 's%/inputs/%/home/me/repos/myInfrastructure/assets/%')
+```
+to fix that.   
