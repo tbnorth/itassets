@@ -205,7 +205,7 @@ DARK_THEME.update(
             f'  node [fontname=FreeSans, fontsize=10, '
             f'color="{DARK_THEME["stroke"]}", '
             f'        fontcolor="{DARK_THEME["text"]}"]',
-            f'  edge [fontname=FreeSans, fontsize=10, ',
+            '  edge [fontname=FreeSans, fontsize=10, ',
             f'color="{DARK_THEME["stroke"]}"]',
         ],
         dot_edit_col='#303030',
@@ -563,14 +563,49 @@ def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
         else:
             Link('', txt)
 
-    dependents = [
-        Link(
-            html_filename(lookup[id_]),
-            lookup[id_]['type'] + ':' + lookup[id_]['name'],
+    def existing_links(links, lookup):
+        """Return list of `Link`s for the ids in `links` in `lookup`.
+
+        Args:
+            links (list of str): IDs of things to link
+            lookup (dict of assets): for building Links
+        Returns:
+            [Link,...]: Links
+             """
+
+        return [
+            Link(
+                html_filename(lookup[id_]),
+                lookup[id_]['type'] + ':' + lookup[id_]['name'],
+            )
+            for id_ in links
+            if id_ in lookup  # absent in trimmed graph maybe
+        ]
+
+    dependents = existing_links(asset['_dependents'], lookup)
+    all_deps = set()
+    finals = set()
+    checked = set()
+    to_check = list(asset['_dependents'])
+    while to_check:
+        dep = to_check.pop(0)
+        all_deps.add(dep)
+        checked.add(dep)
+        if dep not in lookup:
+            continue
+        depdeps = lookup[dep]['_dependents']
+        if not depdeps:
+            finals.add(dep)
+        to_check.extend(
+            [i for i in depdeps if i not in to_check and i not in checked]
         )
-        for id_ in asset['_dependents']
-        if id_ in lookup  # absent in trimmed graph maybe
+    intermediates = [
+        i
+        for i in all_deps
+        if i not in asset['_dependents'] and i not in finals
     ]
+    intermediates = existing_links(intermediates, lookup)
+    finals = existing_links(finals, lookup)
 
     context = dict(
         asset=asset,
@@ -580,7 +615,11 @@ def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
         keys=keys,
         lists=lists,
         dependencies=dependencies,
-        dependents=dependents,
+        dependents={
+            'direct': dependents,
+            'intermediate': intermediates,
+            'final': finals,
+        },
         top="",
         dep_map=dep_map,
         generated=title.split(' updated ')[-1],
@@ -809,7 +848,7 @@ def write_maps(assets, issues, title):
     )
     # assets not leading to applications
     write_map(
-        base=f"_unapplied",
+        base="_unapplied",
         assets=assets,
         issues=issues,
         title=title,
@@ -820,7 +859,7 @@ def write_maps(assets, issues, title):
     # maps of all assets of a particular type, shows their dependencies
     for type_ in ASSET_TYPE:
         write_map(
-            base=f"_" + type_.replace('/', '_'),
+            base="_" + type_.replace('/', '_'),
             assets=assets,
             issues=issues,
             title=title,
@@ -830,7 +869,7 @@ def write_maps(assets, issues, title):
     # individual maps for each application showing dependencies
     for app in [i for i in assets if i['type'].startswith('application/')]:
         write_map(
-            base=f"_" + app['id'],
+            base="_" + app['id'],
             assets=assets,
             issues=issues,
             title=title,

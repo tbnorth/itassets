@@ -25,16 +25,18 @@
 {% endif %}
 {% endfor %}
 {% endif %}
-{% if dependents %}
-<div>Dependents</div>
-{% for dep in dependents %}
-{% if dep.link %}
-<div><a href="{{top}}{{dep.link}}">{{dep.text}}</a></div>
-{% else %}
-<div>{{dep.text}}</div>
-{% endif %}
+{% for kind in dependents %}
+  {% if dependents[kind] %}
+    <div>{{kind|title}} dependents</div>
+    {% for dep in dependents[kind] %}
+      {% if dep.link %}
+        <div><a href="{{top}}{{dep.link}}">{{dep.text}}</a></div>
+      {% else %}
+        <div>{{dep.text}}</div>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
 {% endfor %}
-{% endif %}
 <div>
 [<a href="{{edit_url}}">edit</a>]
 [<a href="_{{asset.type|replace('/','_')}}.html">all {{asset.type}} assets</a>]
