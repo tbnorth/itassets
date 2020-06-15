@@ -85,7 +85,7 @@ the database on a GitHub / GitHub-Enterprise site.  The docker container can be
 started like this:
 ```
 sudo docker run -d -p 8181:8000 \
-    -v /some/path0/asset_repo/repo \
+    -v /some/path0/asset_repo:/repo \
     -v /some/path1/asset_repo/assets_yml:/inputs \
     -v /some/path2:/outputs \
     -v /some/path3/ssh:/root/.ssh \
