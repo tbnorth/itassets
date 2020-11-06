@@ -3,7 +3,9 @@ import json
 import os
 import re
 import time
+
 from collections import defaultdict, namedtuple
+from importlib import import_module  # import import importer
 from itertools import chain
 from types import SimpleNamespace
 
@@ -13,173 +15,7 @@ import yaml
 
 OPT = SimpleNamespace()  # global (for now) options
 
-AT = namedtuple(
-    "AssetType", "description style color tags fields depends prefix"
-)
-
-# shape / color for drawing graphs
-# top => top level node like an application, needs no dependents to
-#        justify its existence
-# bottom => bottom level node like a server, doesn't need to depend on anything
-ASSET_TYPE = {
-    'application/external': AT(
-        '"Terminal" asset type, that users use',
-        "shape=oval, width=1.5, rank=max",
-        'green',
-        ['top'],
-        ['location', 'owner'],
-        [
-            '(cloud/service|container/.*|vm/virtualbox|'
-            'physical/server/service$|website/static)'
-        ],
-        'app',
-    ),
-    # application/internal same as external except peripheries=2
-    'application/internal': AT(
-        '"Terminal" asset type, that users use',
-        "shape=oval, width=1.5, rank=max, peripheries=2",
-        'green',
-        ['top'],
-        ['location', 'owner'],
-        [
-            '(cloud/service|container/.*|vm/virtualbox|'
-            'physical/server/service$|website/static)'
-        ],
-        'app',
-    ),
-    'backup': AT(
-        "A backup solution",
-        'shape=component, width=1.5',
-        'white',
-        [],
-        ['location'],
-        [],
-        'bak',
-    ),
-    'cloud/service': AT(
-        "A service (web-server, RDMS) running in the cloud",
-        'shape=polygon, width=1.25, sides=9',
-        'pink',
-        [],
-        ['location'],
-        ['resource/deployment'],
-        'csvc',
-    ),
-    'container/docker': AT(
-        "A docker container (image instance)",
-        'shape="box3d", width=1.5',
-        'green',
-        [],
-        [],
-        [
-            'resource/deployment',
-            '(physical/server|cloud/service)',
-            'storage/.*',
-        ],
-        'con',
-    ),
-    'database': AT(
-        "A database on a server",
-        "shape=house",
-        "white",
-        [],
-        [],
-        [
-            '(cloud/service|container/.*|vm/virtualbox|'
-            'physical/server/service$)',
-            'backup',
-        ],
-        'db',
-    ),
-    'drive': AT(
-        "A physical drive",
-        'shape=cylinder, width=1.25',
-        'cyan',
-        [],
-        ['location', 'size'],
-        ['physical/server'],
-        'drv',
-    ),
-    'physical/server': AT(
-        "A real physical server",
-        'shape=box, width=1',
-        'gray',
-        ['bottom'],
-        [],
-        [],
-        'srv',
-    ),
-    # e.g. a non-containerized Django app., c.f. /infrastructure variant below
-    'physical/server/service': AT(
-        "A service (Django, web app. etc.) running directly"
-        " on a physical server",
-        'shape=pentagon, width=1.25',
-        'pink',
-        [],
-        [],
-        ['physical/server', 'resource/deployment', 'storage/.*'],
-        'psvc',
-    ),
-    # /infrastructure denotes the "core" HTTP etc. service on a server
-    'physical/server/service/infrastructure': AT(
-        "A service (web-server, RDMS) running directly"
-        " on a physical server",
-        'shape=octagon, width=1.25',
-        'pink',
-        [],
-        [],
-        ['physical/server', 'resource/deployment', 'storage/.*'],
-        'psvc',
-    ),
-    'resource/deployment': AT(
-        "The source / deployment resource for an asset, "
-        "e.g. the Dockerfile for a Docker image",
-        'shape=note, width=1.5',
-        'cyan',
-        ['bottom'],
-        ['location'],
-        [],
-        'dply',
-    ),
-    'storage/local': AT(
-        "A local storage solutions, requires backup",
-        'shape=folder,width=1.5',
-        'white',
-        [],
-        ['location'],
-        ['backup', 'drive'],
-        'sto',
-    ),
-    'vm/virtualbox': AT(
-        "A VirtualBox VM",
-        'shape=box, peripheries="2", width=1.4',
-        'pink',
-        [],
-        [],
-        ['physical/server', 'storage/.*'],
-        'vbx',
-    ),
-    'website/static': AT(
-        "A static website, may include javascript",
-        'shape=tab,width=1',
-        'white',
-        [],
-        ['location'],
-        ['resource/deployment', 'storage/.*', 'physical/server/service'],
-        'wss',
-    ),
-}
-
-ID_PREFIX = {v.prefix: v.description for v in ASSET_TYPE.values()}
-# fields treated as lists on report output
-LIST_FIELDS = (
-    'closed_issues',
-    'depends_on',
-    'links',
-    'notes',
-    'open_issues',
-    'tags',
-)
+at = import_module('itasset_defs')
 
 LIGHT_THEME = dict(
     name='light',
@@ -237,7 +73,7 @@ def validator(type_):
 # do this first, as it may explain subsequent KeyErrors
 @validator('.*')
 def known_asset_type(asset, lookup, dependents):
-    if asset.get('type') not in ASSET_TYPE:
+    if asset.get('type') not in at.ASSET_TYPE:
         yield 'ERROR', f"Has unknown type {asset.get('type')}"
 
 
@@ -251,7 +87,8 @@ def no_undef_depends(asset, lookup, dependents):
 
 @validator('.*')
 def known_id_prefix(asset, lookup, dependents):
-    if asset['id'].split('_')[0] not in ID_PREFIX:
+    id_prefix = {v.prefix: v.description for v in at.ASSET_TYPE.values()}
+    if asset['id'].split('_')[0] not in id_prefix:
         yield 'WARNING', "Has unknown prefix"
 
 
@@ -260,7 +97,7 @@ def dependents_if_not_top(asset, lookup, dependents):
     if (
         asset['id'] not in dependents
         and 'type' in asset
-        and 'top' not in ASSET_TYPE[asset['type']].tags
+        and 'top' not in at.ASSET_TYPE[asset['type']].tags
     ):
         yield 'WARNING', "Non-top-level asset has no dependents"
 
@@ -269,7 +106,7 @@ def dependents_if_not_top(asset, lookup, dependents):
 def dependencies_if_not_bottom(asset, lookup, dependents):
     if (
         not asset.get('depends_on')
-        and 'bottom' not in ASSET_TYPE[asset['type']].tags
+        and 'bottom' not in at.ASSET_TYPE[asset['type']].tags
     ):
         yield 'WARNING', "Non-bottom-level asset has no dependencies"
 
@@ -289,7 +126,7 @@ def tagged_needs_work(asset, lookup, dependents):
 @validator('.*')
 def check_fields(asset, lookup, dependents):
     type_ = asset['type']
-    for field in ASSET_TYPE[type_].fields:
+    for field in at.ASSET_TYPE[type_].fields:
         if not asset.get(field):
             yield 'WARNING', f"'{type_}' definition missing '{field}' field"
 
@@ -298,7 +135,7 @@ def check_fields(asset, lookup, dependents):
 def check_depends(asset, lookup, dependents):
     """Check asset lists dependencies specified in its definition"""
     type_ = asset['type']
-    for dep in ASSET_TYPE[type_].depends:
+    for dep in at.ASSET_TYPE[type_].depends:
         if '^' + dep in asset_dep_ids(asset):
             yield 'NOTE', f"Specifically excludes '{dep}' dependency"
             continue
@@ -690,7 +527,7 @@ def get_tooltip(asset, issues):
         ]
     )
     # put tags etc. in tooltip
-    for list_field in LIST_FIELDS:
+    for list_field in at.LIST_FIELDS:
         if asset.get(list_field):
             tooltip.append(list_field.upper())
             for item in asset.get(list_field, []):
@@ -723,7 +560,7 @@ def assets_to_dot(assets, issues, title, top):
         if False:  # used to generate demo output
             attr['label'] = asset['type'].split('/')[-1]
         # `style` is compound 'shape=box, color=cyan', so key is None
-        attr[None] = (ASSET_TYPE[asset["type"]].style,)
+        attr[None] = (at.ASSET_TYPE[asset["type"]].style,)
         if asset['id'] in issues:
             if any(i[0] != 'NOTE' for i in issues[asset['id']]):
                 attr['style'] = 'filled'
@@ -794,7 +631,7 @@ def write_reports(assets, issues, title, archived):
         for i in archived
     ]
     asset_types = []
-    for key, asset in ASSET_TYPE.items():
+    for key, asset in at.ASSET_TYPE.items():
         asset_types.append(asset._asdict())
         asset_types[-1]['id'] = key
         make_asset_key(key, asset)
@@ -857,7 +694,7 @@ def write_maps(assets, issues, title):
         negate=True,
     )
     # maps of all assets of a particular type, shows their dependencies
-    for type_ in ASSET_TYPE:
+    for type_ in at.ASSET_TYPE:
         write_map(
             base="_" + type_.replace('/', '_'),
             assets=assets,
