@@ -341,6 +341,11 @@ def make_parser():
         help="Trim map to show assets not leading to --leaf-type",
         action='store_true',
     )
+    parser.add_argument(
+        "--updated",
+        help="Specify update time, mostly for testing",
+        metavar='WHEN',
+    )
 
     return parser
 
@@ -583,6 +588,7 @@ def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
         ]
 
     dependents = existing_links(asset['_dependents'], lookup)
+    dependents.sort()
     all_deps = set()
     finals = set()
     checked = set()
@@ -605,7 +611,9 @@ def report_to_html(asset, lookup, issues, title, write=True, dep_map=True):
         if i not in asset['_dependents'] and i not in finals
     ]
     intermediates = existing_links(intermediates, lookup)
+    intermediates.sort()
     finals = existing_links(finals, lookup)
+    finals.sort()
 
     context = dict(
         asset=asset,
@@ -666,14 +674,14 @@ def asset_dep_ids(asset, insufficient=False):
     ]
 
 
-def get_title(assets):
+def get_title(opt, assets):
     """Overall title from a `general` section, plus time"""
     ttl = general_info(assets)
     if ttl:
         ttl = ttl['title']
     else:
         ttl = ''
-    return f"{ttl} updated {time.asctime()}"
+    return f"{ttl} updated {opt.updated if opt.updated else time.asctime()}"
 
 
 def get_tooltip(asset, issues):
@@ -994,7 +1002,7 @@ def prep_assets(opt):
 
 def generate_outputs(opt, assets, archived, lookup, issues):
 
-    title = get_title(assets)
+    title = get_title(opt, assets)
     os.makedirs(OPT.output, exist_ok=True)
     for asset in assets:  # after all dependents recorded
         report_to_html(asset, lookup, issues, title)
