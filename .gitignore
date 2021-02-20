@@ -1,3 +1,4 @@
-venv
-__pycache__
 .vim
+__pycache__
+venv
+venv_itassets

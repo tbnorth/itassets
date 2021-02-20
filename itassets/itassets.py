@@ -177,6 +177,11 @@ class DependencyMapper:
             help="Trim map to show assets not leading to --leaf-type",
             action='store_true',
         )
+        parser.add_argument(
+            "--updated",
+            help="Specify update time, mostly for testing",
+            metavar='WHEN',
+        )
 
         return parser
 
@@ -416,6 +421,7 @@ class DependencyMapper:
             ]
 
         dependents = existing_links(asset['_dependents'], lookup)
+        dependents.sort()
         all_deps = set()
         finals = set()
         checked = set()
@@ -438,7 +444,9 @@ class DependencyMapper:
             if i not in asset['_dependents'] and i not in finals
         ]
         intermediates = existing_links(intermediates, lookup)
+        intermediates.sort()
         finals = existing_links(finals, lookup)
+        finals.sort()
 
         context = dict(
             asset=asset,
@@ -501,14 +509,15 @@ class DependencyMapper:
             if (not insufficient or 'INSUF' not in i)
         ]
 
-    def get_title(self, assets):
+    def get_title(self, opt, assets):
         """Overall title from a `general` section, plus time"""
         ttl = self.general_info(assets)
         if ttl:
             ttl = ttl['title']
         else:
             ttl = ''
-        return f"{ttl} updated {time.asctime()}"
+        updated = opt.updated or time.asctime()
+        return f"{ttl} updated {updated}"
 
     def get_tooltip(self, asset, issues):
         """Hover text in graph view, describes asset"""
@@ -837,7 +846,7 @@ class DependencyMapper:
 
     def generate_outputs(self, opt, assets, archived, lookup, issues):
 
-        title = self.get_title(assets)
+        title = self.get_title(opt, assets)
         os.makedirs(OPT.output, exist_ok=True)
         for asset in assets:  # after all dependents recorded
             self.report_to_html(asset, lookup, issues, title)
