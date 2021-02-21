@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-AT = namedtuple(
+AssetType = namedtuple(
     "AssetType",
     [
         "description",  # description of node

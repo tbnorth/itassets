@@ -54,7 +54,7 @@ VALIDATORS_COMPILED = {}  # updated in main()
 class DependencyMapper:
     def __init__(self):
         # node definitions
-        self.ndef = import_module('itasset_defs')
+        self.ndef = import_module('asset_defs.it_assets.itasset_defs')
 
     def validator(type_):
         """Validator functions get (asset, lookup, dependents) params.
