@@ -52,9 +52,9 @@ VALIDATORS_COMPILED = {}  # updated in main()
 
 
 class DependencyMapper:
-    def __init__(self):
+    def __init__(self, defs):
         # node definitions
-        self.ndef = import_module('asset_defs.it_assets.itasset_defs')
+        self.ndef = import_module(defs)
 
     def validator(type_):
         """Validator functions get (asset, lookup, dependents) params.
@@ -145,7 +145,8 @@ class DependencyMapper:
             ):
                 yield 'WARNING', f"'{type_}' should define '{dep}' dependency"
 
-    def make_parser(self,):
+    @staticmethod
+    def make_parser():
 
         parser = argparse.ArgumentParser(
             description="""Make reports from asset DB""",
@@ -182,10 +183,16 @@ class DependencyMapper:
             help="Specify update time, mostly for testing",
             metavar='WHEN',
         )
+        parser.add_argument(
+            "--defs",
+            help="Module from which to load node types, e.g. mydefs.foaf",
+            metavar='module',
+        )
 
         return parser
 
-    def get_options(self, args=None):
+    @staticmethod
+    def get_options(args=None):
         """
         get_options - use argparse to parse args, and return a
         argparse.Namespace, possibly with some changes / expansions /
@@ -200,7 +207,7 @@ class DependencyMapper:
         Returns:
             argparse.Namespace: options with modifications / validations
         """
-        opt = self.make_parser().parse_args(args)
+        opt = DependencyMapper.make_parser().parse_args(args)
 
         # modifications / validations go here
 
@@ -877,8 +884,9 @@ class DependencyMapper:
 
 
 def main():
-    dm = DependencyMapper()
-    dm.generate_all(dm.get_options())
+    opt = DependencyMapper.get_options()
+    dm = DependencyMapper(opt.defs or 'asset_defs.it_assets.itasset_defs')
+    dm.generate_all(opt)
 
 
 if __name__ == "__main__":
