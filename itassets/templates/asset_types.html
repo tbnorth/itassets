@@ -3,9 +3,11 @@
 <p>In addtion to the <a href="{{top}}index.html">map of everything</a> and the
 individual asset type maps linked below, there's a
 <a href="{{top}}_unapplied.html">map of things not used by applications</a>.
-</p>
+</p><p>
+Overview of dependencies, scroll down or click label for individual asset types.
+</p><p>{{svg}}</p>
 {% for at in asset_types %}
-<h3>{{at.id}} <span class="prefix">{{at.prefix}}_</span></h3>
+<h3 id="{{at.id}}">{{at.id}} <span class="prefix">{{at.prefix}}_</span></h3>
 <img src="__{{at.id|replace('/', '-')}}.svg" style="float:right; margin-right: 50%"/>
 <p>{{at.description}}</p>
 <div>Depends on: <code>{{at.depends}}</code></div>

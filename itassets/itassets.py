@@ -19,8 +19,10 @@ LIGHT_THEME = dict(
     name='light',
     dot_header=[
         "digraph Assets {{",
-        '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
-        '       label="{title}", fontname=FreeSans, tooltip=" "]',
+        '  graph [rankdir=LR, concentrate=true, ',
+        # URL needs to be on it's own line
+        '         URL="{top}index.html", ',
+        '         label="{title}", fontname=FreeSans, tooltip=" "]',
         "  node [fontname=FreeSans, fontsize=10]",
         "  edge [fontname=FreeSans, fontsize=10]",
     ],
@@ -33,7 +35,9 @@ DARK_THEME.update(
     dict(
         dot_header=[
             "digraph Assets {{",
-            '  graph [rankdir=LR, concentrate=true, URL="{top}index.html"',
+            '  graph [rankdir=LR, concentrate=true, ',
+            # URL needs to be on it's own line
+            '         URL="{top}index.html", ',
             '         label="{title}", fontname=FreeSans, tooltip=" ",',
             '         bgcolor=black]',
             f'  node [fontname=FreeSans, fontsize=10, '
@@ -629,6 +633,33 @@ class DependencyMapper:
             out.write('\n'.join(ans))
         os.system(f"dot -Tsvg -o{outfile}.svg {outfile}.dot")
 
+    def make_asset_dep_graph(self):
+        """Make dependency graph of asset types"""
+        ans = [
+            i.format(top='', title='')
+            for i in OPT.theme["dot_header"]
+            if 'URL' not in i
+        ]
+        for key, asset_type in self.ndef.ASSET_TYPE.items():
+            node = key.replace('/', '_')
+            ans += [f'{node} [label="{key}", href="#{key}"]']
+            ans += [f"{node} [{asset_type.style}]"]
+            if asset_type.depends:
+                pattern = f"({'|'.join(i+'$' for i in asset_type.depends)})"
+                deps = re.compile(pattern)
+                print(f"{key} {pattern}")
+                for other in self.ndef.ASSET_TYPE:
+                    if other == key:
+                        continue
+                    if deps.match(other):
+                        ans += [f"{other.replace('/', '_')} -> {node}"]
+                        print(f"{other} => {node}")
+        ans += ['}']
+        outfile = f"{OPT.output}/__asset_dep_graph"
+        with open(f"{outfile}.dot", 'w') as out:
+            out.write('\n'.join(ans))
+        os.system(f"dot -Tsvg -o{outfile}.svg {outfile}.dot")
+
     def write_reports(self, assets, issues, title, archived):
         """~Query data to make common context for generating various reports,
         and write HTML reports via templates
@@ -654,6 +685,7 @@ class DependencyMapper:
             asset_types.append(asset._asdict())
             asset_types[-1]['id'] = key
             self.make_asset_key(key, asset)
+        self.make_asset_dep_graph()
         # types of issues
         issue_counts = set(j[0] for i in issues.values() for j in i)
         # count of each type
@@ -661,6 +693,7 @@ class DependencyMapper:
             i: len([j for k in issues.values() for j in k if j[0] == i])
             for i in issue_counts
         }
+        svg = open(f"{OPT.output}/__asset_dep_graph.svg").read()
         context = dict(
             applications=applications,
             archived=archived,
@@ -675,6 +708,7 @@ class DependencyMapper:
             theme=OPT.theme,
             title=title,
             top='',
+            svg=svg,
         )
         with open(f"{OPT.output}/index.html", 'w') as out:
             out.write(env.get_template("map.html").render(context))
