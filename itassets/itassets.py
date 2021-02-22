@@ -303,17 +303,20 @@ class DependencyMapper:
         types of assets dependent on this asset, to generate trimmed maps
         with --leaf-type.
         """
-        # FIXME: catch circular dependencies
         lookup = {i['id']: i for i in assets}
 
-        def add_types(asset, type_, lookup):
+        def add_types(asset, type_, lookup, seen):
             asset.setdefault(output, set()).add(type_)
             for depend in self.asset_dep_ids(asset):
+                if depend in seen:
+                    continue
+                seen.add(depend)
                 if depend in lookup:
-                    add_types(lookup[depend], type_, lookup)
+                    add_types(lookup[depend], type_, lookup, seen)
 
         for asset in assets:
-            add_types(asset, asset[field], lookup)
+            seen = set()
+            add_types(asset, asset[field], lookup, seen)
 
     def node_dot(self, id_, attr):
         """Format graphviz dot node definition"""
