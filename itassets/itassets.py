@@ -36,7 +36,7 @@ DARK_THEME.update(
         dot_header=[
             "digraph Assets {{",
             '  graph [rankdir=LR, concentrate=true, ',
-            # URL needs to be on it's own line
+            # URL needs to be on its own line
             '         URL="{top}index.html", ',
             '         label="{title}", fontname=FreeSans, tooltip=" ",',
             '         bgcolor=black]',
@@ -59,6 +59,13 @@ class DependencyMapper:
     def __init__(self, defs):
         # node definitions
         self.ndef = import_module(defs)
+        uses = defaultdict(lambda: 0)
+        for value in self.ndef.ASSET_TYPE.values():
+            uses[value.prefix] += 1
+        uses = [f"{k}: {v}" for k, v in uses.items() if v > 1]
+        if uses:
+            print('\n'.join(uses))
+            raise Exception("Duplicated ASSET_TYPE prefix")
 
     def validator(type_):
         """Validator functions get (asset, lookup, dependents) params.
