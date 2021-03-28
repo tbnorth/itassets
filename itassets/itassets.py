@@ -199,6 +199,11 @@ class DependencyMapper:
             help="Module from which to load node types, e.g. mydefs.foaf",
             metavar='module',
         )
+        parser.add_argument(
+            "--snippets",
+            help="Generate vim snippets for asset types",
+            action="store_true",
+        )
 
         return parser
 
@@ -855,6 +860,23 @@ class DependencyMapper:
         assets, archived, lookup, issues = self.prep_assets(opt)
         self.generate_outputs(opt, assets, archived, lookup, issues)
 
+    def generate_snippets(self, opt):
+        print("\n### START: asset snippets\n")
+        for type_, spec in self.ndef.ASSET_TYPE.items():
+            print(
+                f"\nsnippet sn \"{spec.prefix} {type_} {spec.description}\" i"
+            )
+            print(f"  - id: {spec.prefix}_")
+            print("    name: ")
+            print("    description: ")
+            print(f"    type: {type_}")
+            if spec.depends:
+                print(f"    depends_on: {spec.depends}")
+            for field in spec.fields:
+                print(f"    {field}:")
+            print("endsnippet")
+        print("\n### END: asset snippets")
+
     def prep_assets(self, opt):
         assets = []
         for asset_file in chain.from_iterable(opt.assets):
@@ -930,6 +952,9 @@ class DependencyMapper:
 def main():
     opt = DependencyMapper.get_options()
     dm = DependencyMapper(opt.defs or 'asset_defs.it_assets.itasset_defs')
+    if opt.snippets:
+        dm.generate_snippets(opt)
+        return
     dm.generate_all(opt)
 
 
