@@ -4,6 +4,7 @@ import os
 import re
 import time
 from collections import defaultdict, namedtuple
+from copy import deepcopy
 from importlib import import_module  # import import importer
 from itertools import chain
 from types import SimpleNamespace
@@ -717,9 +718,11 @@ class DependencyMapper:
     def write_maps(self, assets, issues, title):
         """Use graphviz dot to make SVG graphs / maps"""
         # main graph of everything
+        top_assets = deepcopy(assets)
+        self.collapse_assets(top_assets)
         self.write_map(
             base="index",
-            assets=assets,
+            assets=top_assets,
             issues=issues,
             title=title,
             leads_to=".*",
@@ -845,6 +848,56 @@ class DependencyMapper:
             print("endsnippet")
         print("\n### END: asset snippets")
 
+    def collapse_assets(self, assets):
+        """Collapse nodes according to `contains` field, considering expanded nodes."""
+        # If A contains B and B contains C, treat C as contained by A, for the purposes
+        # of drawing the graph.
+        expanded = []  # ["db_factotum"]
+        contained_by = {}
+        lookup = {i["id"]: i for i in assets}
+        for asset in assets:
+            if asset["id"] in expanded:
+                continue
+            for contained in asset.get("contains", []):
+                contained_by[contained] = asset["id"]
+        changed = True
+        while changed:  # iterate until no change occurs
+            changed = False
+            for contained, container in list(contained_by.items()):
+                if container in contained_by:
+                    changed = True
+                    contained_by[contained] = contained_by[container]
+
+        for asset in assets:
+            self.collapse_asset(asset, assets, contained_by, lookup)
+
+    def collapse_asset(self, asset, assets, contained_by, lookup):
+        """Collapse one node"""
+        # don't depend on things that are contained (collapsed)
+        deps_on = asset.get("depends_on", [])
+        for dependency in list(deps_on):
+            if dependency in contained_by:
+                # delete contained (collapsed) dependency
+                deps_on.remove(dependency)
+                if contained_by[dependency] not in deps_on:
+                    # and add depebdebct on container instead
+                    deps_on.append(contained_by[dependency])
+
+        # tell our container to refer to our upstreams if we are contained
+        if asset["id"] in contained_by:
+            container = lookup[contained_by[asset["id"]]]
+            for upstream in asset.get("depends_on", []):
+                if (
+                    upstream not in container.get("depends_on")
+                    and upstream != container["id"]
+                ):
+                    container.setdefault("depends_on", []).append(upstream)
+
+        if asset["id"] in deps_on:  # containing asset ends up depending on itself
+            deps_on.remove(asset["id"])
+
+        assets[:] = [i for i in assets if i["id"] not in contained_by]
+
     def prep_assets(self, opt):
         assets = []
         for asset_file in chain.from_iterable(opt.assets):
@@ -863,7 +916,7 @@ class DependencyMapper:
         for asset in assets + archived:
             asset["_reppath"] = self.html_filename(asset)
             asset["_self.edit_url"] = self.edit_url(asset)
-            asset["_self.dep_types"] = self.dep_types(asset)
+            asset["_self.dep_types"] = self.dep_types(asset)  # immediate deps
             if asset["id"] in issues:
                 asset["_class"] = "issues"
 
