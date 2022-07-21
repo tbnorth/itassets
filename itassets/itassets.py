@@ -850,11 +850,25 @@ class DependencyMapper:
 
     def collapse_assets(self, assets):
         """Collapse nodes according to `contains` field, considering expanded nodes."""
+        lookup = {i["id"]: i for i in assets}
+        expanded = set(["view_seqapass"])
+        ## # get all containment relationships
+        ## contained_by = {}
+        ## for asset in assets:
+        ##     for contained in asset.get("contains", []):
+        ##         contained_by[contained] = asset["id"]
+        ## # expand all parents
+        ## changed = True
+        ## while changed:
+        ##     changed = False
+        ##     for contained, container in list(contained_by.items()):
+        ##         if contained in expanded and container not in expanded:
+        ##             expanded.add(container)
+        ##             changed = True
+
         # If A contains B and B contains C, treat C as contained by A, for the purposes
         # of drawing the graph.
-        expanded = []  # ["db_factotum"]
-        contained_by = {}
-        lookup = {i["id"]: i for i in assets}
+        contained_by = {}  # recreate, skipping expanded this time
         for asset in assets:
             if asset["id"] in expanded:
                 continue
