@@ -852,55 +852,57 @@ class DependencyMapper:
         """Collapse nodes according to `contains` field, considering expanded nodes."""
         lookup = {i["id"]: i for i in assets}
         expanded = set(["view_seqapass"])
-        ## # get all containment relationships
-        ## contained_by = {}
-        ## for asset in assets:
-        ##     for contained in asset.get("contains", []):
-        ##         contained_by[contained] = asset["id"]
-        ## # expand all parents
-        ## changed = True
-        ## while changed:
-        ##     changed = False
-        ##     for contained, container in list(contained_by.items()):
-        ##         if contained in expanded and container not in expanded:
-        ##             expanded.add(container)
-        ##             changed = True
+        # get all containment relationships
+        contained_by = {
+            contained: asset["id"]
+            for asset in assets
+            for contained in asset.get("contains", [])
+        }
+
+        # expand expanded set to include all parents of expanded items
+        while missing_from_expanded := {
+            v for k, v in contained_by.items() if k in expanded and v not in expanded
+        }:
+            expanded |= missing_from_expanded
+
+        contained_by = {  # recreate, skipping expanded this time
+            contained: asset["id"]
+            for asset in assets
+            if asset["id"] not in expanded
+            for contained in asset.get("contains", [])
+        }
 
         # If A contains B and B contains C, treat C as contained by A, for the purposes
         # of drawing the graph.
-        contained_by = {}  # recreate, skipping expanded this time
-        for asset in assets:
-            if asset["id"] in expanded:
-                continue
-            for contained in asset.get("contains", []):
-                contained_by[contained] = asset["id"]
-        changed = True
-        while changed:  # iterate until no change occurs
-            changed = False
-            for contained, container in list(contained_by.items()):
-                if container in contained_by:
-                    changed = True
-                    contained_by[contained] = contained_by[container]
+        while reparent := {
+            contained_by[contained]: contained_by[container]
+            for contained, container in contained_by.items()
+            if container in contained_by
+        }:
+            contained_by |= reparent
 
         for asset in assets:
             self.collapse_asset(asset, assets, contained_by, lookup)
 
+        assets[:] = [i for i in assets if i["id"] not in contained_by]
+
     def collapse_asset(self, asset, assets, contained_by, lookup):
         """Collapse one node"""
-        # don't depend on things that are contained (collapsed)
         deps_on = asset.get("depends_on", [])
+
+        # don't depend on things that are contained (collapsed)
         for dependency in list(deps_on):
             if dependency in contained_by:
                 # delete contained (collapsed) dependency
                 deps_on.remove(dependency)
                 if contained_by[dependency] not in deps_on:
-                    # and add depebdebct on container instead
+                    # and add dependency on container instead
                     deps_on.append(contained_by[dependency])
 
         # tell our container to refer to our upstreams if we are contained
         if asset["id"] in contained_by:
             container = lookup[contained_by[asset["id"]]]
-            for upstream in asset.get("depends_on", []):
+            for upstream in deps_on:
                 if (
                     upstream not in container.get("depends_on")
                     and upstream != container["id"]
@@ -909,8 +911,6 @@ class DependencyMapper:
 
         if asset["id"] in deps_on:  # containing asset ends up depending on itself
             deps_on.remove(asset["id"])
-
-        assets[:] = [i for i in assets if i["id"] not in contained_by]
 
     def prep_assets(self, opt):
         assets = []
