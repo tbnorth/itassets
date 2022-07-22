@@ -23,7 +23,7 @@ LIGHT_THEME = dict(
         # URL needs to be on it's own line
         '         URL="{top}index.html", ',
         '         label="{title}", fontname=FreeSans, tooltip=" "]',
-        "  node [fontname=FreeSans, fontsize=10]",
+        "  node [fontname=FreeSans, fontsize=10, ordering=out]",
         "  edge [fontname=FreeSans, fontsize=10]",
     ],
     dot_edit_col="#c0c0c0",
@@ -589,7 +589,10 @@ class DependencyMapper:
             ans.append(self.node_dot(asset["_node_id"], attr))
 
             # write links to graphviz file, FROM dep TO asset
-            for dep in [i for i in self.asset_dep_ids(asset) if not i.startswith("^")]:
+            for dep in sorted(
+                [i for i in self.asset_dep_ids(asset) if not i.startswith("^")],
+                key=lambda x: other[x]["name"],
+            ):
                 attr = dict(fontcolor=OPT.theme["dot_edit_col"])
                 if asset["id"] not in edit_linked:
                     edit_linked.add(asset["id"])
@@ -718,16 +721,25 @@ class DependencyMapper:
     def write_maps(self, assets, issues, title):
         """Use graphviz dot to make SVG graphs / maps"""
         # main graph of everything
-        top_assets = deepcopy(assets)
-        self.collapse_assets(top_assets)
-        self.write_map(
-            base="index",
-            assets=top_assets,
-            issues=issues,
-            title=title,
-            leads_to=".*",
-            in_field="_dependent_types",
-        )
+        # list of lists of expanded nodes, only one expanded at a time here though
+        submaps = [[i["id"]] for i in assets if i.get("contains")]
+        submaps.append([])  # for the main index, nothing expanded
+        submaps.append(set(sum(submaps, start=[])))  # everything expanded
+        for submap in submaps:
+            base = "index" + (
+                "_ALL" if len(submap) > 1 else ("_" + submap[0]) if submap else ""
+            )
+            print(f"Writing submap {base}")
+            top_assets = deepcopy(assets)
+            self.collapse_assets(top_assets, expanded=submap)
+            self.write_map(
+                base=base,
+                assets=top_assets,
+                issues=issues,
+                title=title,
+                leads_to=".*",
+                in_field="_dependent_types",
+            )
         # assets not leading to applications
         self.write_map(
             base="_unapplied",
@@ -848,10 +860,10 @@ class DependencyMapper:
             print("endsnippet")
         print("\n### END: asset snippets")
 
-    def collapse_assets(self, assets):
+    def collapse_assets(self, assets, expanded):
         """Collapse nodes according to `contains` field, considering expanded nodes."""
         lookup = {i["id"]: i for i in assets}
-        expanded = set(["view_seqapass"])
+        expanded = set(expanded)
         # get all containment relationships
         contained_by = {
             contained: asset["id"]
@@ -875,7 +887,7 @@ class DependencyMapper:
         # If A contains B and B contains C, treat C as contained by A, for the purposes
         # of drawing the graph.
         while reparent := {
-            contained_by[contained]: contained_by[container]
+            contained: contained_by[container]
             for contained, container in contained_by.items()
             if container in contained_by
         }:
