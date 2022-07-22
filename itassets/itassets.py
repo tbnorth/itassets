@@ -798,16 +798,7 @@ class DependencyMapper:
                 a2s[target[0][1:]] = node.get("id")
         return a2s
 
-    def write_map(
-        self,
-        base,
-        assets,
-        issues,
-        title,
-        leads_to,
-        in_field,
-        negate=False,
-    ):
+    def write_map(self, base, assets, issues, title, leads_to, in_field, negate=False):
         """Output HTML containing SVG graph of assets, see self.write_maps()"""
         use = [
             i
@@ -840,6 +831,10 @@ class DependencyMapper:
             subset = f"Assets not leading to an asset of type {leads_to}"
 
         svg = open(f"{OPT.output}/{base}.svg").read()
+        # rename this ...
+        svg = svg.replace("xlink:title", "xlink:xtitle")
+        # and remove this so jQuery tooltip is used, not browser default title display
+        svg = re.sub(r"<title>.*</title>", "", svg)
         asset_map = self.asset_to_svg(svg)
         context = dict(
             title=title,

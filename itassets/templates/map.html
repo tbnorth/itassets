@@ -1,6 +1,9 @@
 {% extends "index.html" %}
 {% block extrahead %}{{super()}}
-<script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="./jquery-ui/jquery-ui.min.js"></script>
+<link href="./jquery-ui/jquery-ui.min.css" rel="stylesheet">
+<link href="./jquery-ui/jquery-ui.theme.min.css" rel="stylesheet">
 <script>
 
 let a2s = {{asset_map}};
@@ -17,6 +20,22 @@ function hilite() {
        let w = window.innerHeight;
        jQ([document.documentElement, document.body]).scrollTop(y-w/2);
    }
+   function content() {
+       return jQ(this).parent().attr("xlink:xtitle")
+   }
+   // https://stackoverflow.com/a/18238005/1072212
+   function close(event, ui) {
+            ui.tooltip.hover(
+            function () {
+                $(this).stop(true).fadeTo(400, 1);
+            },
+            function () {
+                $(this).fadeOut("400", function () {
+                    $(this).remove();
+                })
+            });
+        }
+   jQ(document).tooltip({items:"text", content: content, close: close})
 }
 
 jQ(hilite);
