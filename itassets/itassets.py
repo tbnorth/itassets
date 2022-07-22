@@ -59,6 +59,7 @@ class DependencyMapper:
     def __init__(self, defs):
         # node definitions
         self.ndef = import_module(defs)
+        self.expanded = set()
         uses = defaultdict(lambda: 0)
         for value in self.ndef.ASSET_TYPE.values():
             uses[value.prefix] += 1
@@ -337,8 +338,11 @@ class DependencyMapper:
             attrs=", ".join((f'{k}="{v}"' if k else v[0]) for k, v in attr.items()),
         )
 
-    def dot_node_name(self, text):
+    def dot_node_name(self, asset):
         """Handle wide node names"""
+        text = asset["name"]
+        if asset.get("contains") and asset["id"] not in self.expanded:
+            text += "..."
         hlen = len(text) // 2
         if hlen <= 8:
             return text
@@ -373,6 +377,8 @@ class DependencyMapper:
 
     def html_filename(self, asset):
         """Name of .html file containing info. on asset"""
+        if asset.get("contains") and asset["id"] not in self.expanded:
+            return f"index_{asset['id']}.html"
         return "_".join(asset["id"].split()) + ".html"
 
     def edit_url(self, asset):
@@ -570,8 +576,8 @@ class DependencyMapper:
 
             # dict of dot / graphviz node attributes
             attr = dict(
-                label=self.dot_node_name(asset.get("name")),
-                URL=top + self.html_filename(asset),
+                label=self.dot_node_name(asset),
+                URL=top + self.html_filename(asset) + "#" + asset["id"],
                 target=f"_{asset['id']}",
             )
             if False:  # used to generate demo output
@@ -731,7 +737,8 @@ class DependencyMapper:
             )
             print(f"Writing submap {base}")
             top_assets = deepcopy(assets)
-            self.collapse_assets(top_assets, expanded=submap)
+            self.expanded = set(submap)
+            self.collapse_assets(top_assets)
             self.write_map(
                 base=base,
                 assets=top_assets,
@@ -791,7 +798,16 @@ class DependencyMapper:
                 a2s[target[0][1:]] = node.get("id")
         return a2s
 
-    def write_map(self, base, assets, issues, title, leads_to, in_field, negate=False):
+    def write_map(
+        self,
+        base,
+        assets,
+        issues,
+        title,
+        leads_to,
+        in_field,
+        negate=False,
+    ):
         """Output HTML containing SVG graph of assets, see self.write_maps()"""
         use = [
             i
@@ -860,10 +876,9 @@ class DependencyMapper:
             print("endsnippet")
         print("\n### END: asset snippets")
 
-    def collapse_assets(self, assets, expanded):
+    def collapse_assets(self, assets):
         """Collapse nodes according to `contains` field, considering expanded nodes."""
         lookup = {i["id"]: i for i in assets}
-        expanded = set(expanded)
         # get all containment relationships
         contained_by = {
             contained: asset["id"]
@@ -872,6 +887,7 @@ class DependencyMapper:
         }
 
         # expand expanded set to include all parents of expanded items
+        expanded = set(self.expanded)  # local copy
         while missing_from_expanded := {
             v for k, v in contained_by.items() if k in expanded and v not in expanded
         }:
