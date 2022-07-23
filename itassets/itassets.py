@@ -541,23 +541,31 @@ class DependencyMapper:
         """Hover text in graph view, describes asset"""
         tooltip = []
         # add validation issues to top of tooltip
-        tooltip += ["%s %s" % (i, j) for i, j in issues.get(asset["id"], [])]
+        if issues:
+            tooltip.append("<ul>")
+            tooltip += [
+                "<li>%s %s</li>" % (i, j) for i, j in issues.get(asset["id"], [])
+            ]
+            tooltip.append("</ul>")
         # put asset attributes in tooltip
+        tooltip.append("<dl>")
         tooltip.extend(
             [
-                f"{k}: {v}"
+                f"<dt>{k}</dt><dd>{v}</dd>"
                 for k, v in asset.items()
                 if isinstance(v, str) and not k.startswith("_")
             ]
         )
+        tooltip.append("</dl>")
         # put tags etc. in tooltip
         for list_field in self.ndef.LIST_FIELDS:
             if asset.get(list_field):
-                tooltip.append(list_field.upper())
+                tooltip.append(f"<div>{list_field.upper()}</div><ul>")
                 for item in asset.get(list_field, []):
-                    tooltip.append(f"  {item}")
+                    tooltip.append(f"<li>{item}</li>")
+                tooltip.append("</ul>")
         # include path to asset def. file in tooltip
-        tooltip.append(f"Defined in {asset['file_data']['file_path']}")
+        # tooltip.append(f"Defined in {asset['file_data']['file_path']}")
         return tooltip
 
     def assets_to_dot(self, assets, issues, title, top):

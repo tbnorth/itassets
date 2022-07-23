@@ -1,9 +1,11 @@
 FROM alpine
 
+COPY itassets/requirements.txt /itassets/
+
 RUN apk update \
  && apk upgrade \
  && apk add git openssh-client graphviz ttf-freefont py3-jinja2 py3-lxml py-pip \
- && pip3 install pyyaml
+ && pip3 install -r /itassets/requirements.txt
 
 # this doesn't work because we want to `-v /some/path:/root/.ssh at runtime
 # handled in monitor.py instead
