@@ -553,21 +553,24 @@ class DependencyMapper:
             [
                 f"{k} ** {v} **  "  # two trailing spaces for a line block
                 for k, v in asset.items()
-                if isinstance(v, str) and not k.startswith("_")
+                if isinstance(v, str) and not k.startswith("_") and not k == "narrative"
             ]
         )
         tooltip.append("")
         # put tags etc. in tooltip
         for list_field in self.ndef.LIST_FIELDS:
+            if list_field == "depends_on":
+                continue  # shown by the graph
             if asset.get(list_field):
                 tooltip.append(f"### {list_field.upper()}\n")
                 for item in asset.get(list_field, []):
                     tooltip.append(f"   - {item}")
         # include path to asset def. file in tooltip
         # tooltip.append(f"Defined in {asset['file_data']['file_path']}")
-        # print(MARK_URLS.sub("<\\1>", "\n".join(tooltip)))
-        text = markdown.markdown(MARK_URLS.sub("<\\1>", "\n".join(tooltip)))
-        return text.replace('"', "'")  # " -> ' for use in dot's tooltip="..."
+        if asset.get("narrative"):
+            tooltip += [""] + [asset["narrative"]]
+        tooltip = markdown.markdown(MARK_URLS.sub("<\\1>", "\n".join(tooltip)))
+        return tooltip.replace('"', "'")  # " -> ' for use in dot's tooltip="..."
 
     def assets_to_dot(self, assets, issues, title, top):
         """Return graphviz dot format text describing assets"""
