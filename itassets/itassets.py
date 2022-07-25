@@ -10,6 +10,7 @@ from itertools import chain
 from types import SimpleNamespace
 
 import jinja2
+import markdown
 import yaml
 from lxml import etree
 
@@ -53,6 +54,9 @@ DARK_THEME.update(
 
 VALIDATORS = defaultdict(lambda: [])
 VALIDATORS_COMPILED = {}  # updated in main()
+
+# Used to put URLs not proceeded by ]( or < in <> to make links in markdown.
+MARK_URLS = re.compile(r"(?<!\]\()(?<!<)((?:https?|ftp):\/\/[^\s\]\)]*)")
 
 
 class DependencyMapper:
@@ -542,31 +546,28 @@ class DependencyMapper:
         tooltip = []
         # add validation issues to top of tooltip
         if issues:
-            tooltip.append("<ul>")
-            tooltip += [
-                "<li>%s %s</li>" % (i, j) for i, j in issues.get(asset["id"], [])
-            ]
-            tooltip.append("</ul>")
+            tooltip += ["   - %s %s" % (i, j) for i, j in issues.get(asset["id"], [])]
         # put asset attributes in tooltip
-        tooltip.append("<dl>")
+        tooltip.append("")
         tooltip.extend(
             [
-                f"<dt>{k}</dt><dd>{v}</dd>"
+                f"{k} ** {v} **  "  # two trailing spaces for a line block
                 for k, v in asset.items()
                 if isinstance(v, str) and not k.startswith("_")
             ]
         )
-        tooltip.append("</dl>")
+        tooltip.append("")
         # put tags etc. in tooltip
         for list_field in self.ndef.LIST_FIELDS:
             if asset.get(list_field):
-                tooltip.append(f"<div>{list_field.upper()}</div><ul>")
+                tooltip.append(f"### {list_field.upper()}\n")
                 for item in asset.get(list_field, []):
-                    tooltip.append(f"<li>{item}</li>")
-                tooltip.append("</ul>")
+                    tooltip.append(f"   - {item}")
         # include path to asset def. file in tooltip
         # tooltip.append(f"Defined in {asset['file_data']['file_path']}")
-        return tooltip
+        # print(MARK_URLS.sub("<\\1>", "\n".join(tooltip)))
+        text = markdown.markdown(MARK_URLS.sub("<\\1>", "\n".join(tooltip)))
+        return text.replace('"', "'")  # " -> ' for use in dot's tooltip="..."
 
     def assets_to_dot(self, assets, issues, title, top):
         """Return graphviz dot format text describing assets"""
@@ -596,8 +597,7 @@ class DependencyMapper:
                 if any(i[0] != "NOTE" for i in issues[asset["id"]]):
                     attr["style"] = "filled"
                     attr["fillcolor"] = OPT.theme["dot_err_col"]
-            # tooltip dict -> text
-            attr["tooltip"] = "\\n".join(tooltip)
+            attr["tooltip"] = tooltip
 
             # write node to graphviz file
             ans.append(self.node_dot(asset["_node_id"], attr))
