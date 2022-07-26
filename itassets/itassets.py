@@ -379,9 +379,9 @@ class DependencyMapper:
                 lines[line_i] = " ".join(words)
         return "\n".join(lines)
 
-    def html_filename(self, asset):
+    def html_filename(self, asset, map_mode=False):
         """Name of .html file containing info. on asset"""
-        if asset.get("contains") and asset["id"] not in self.expanded:
+        if map_mode and asset.get("contains") and asset["id"] not in self.expanded:
             return f"index_{asset['id']}.html"
         return "_".join(asset["id"].split()) + ".html"
 
@@ -589,7 +589,7 @@ class DependencyMapper:
             # dict of dot / graphviz node attributes
             attr = dict(
                 label=self.dot_node_name(asset),
-                URL=top + self.html_filename(asset) + "#" + asset["id"],
+                URL=top + self.html_filename(asset, map_mode=True) + "#" + asset["id"],
                 target=f"_{asset['id']}",
             )
             if False:  # used to generate demo output
