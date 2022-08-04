@@ -1,4 +1,5 @@
 jinja2
+jinja2-highlight
 lxml
 markdown
 pyyaml

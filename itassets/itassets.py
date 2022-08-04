@@ -2,17 +2,20 @@ import argparse
 import json
 import os
 import re
+import sys
 import time
 from collections import defaultdict, namedtuple
 from copy import deepcopy
 from importlib import import_module  # import import importer
 from itertools import chain
+from pathlib import Path
 from types import SimpleNamespace
 
 import jinja2
 import markdown
 import yaml
 from lxml import etree
+from pygments.formatters import HtmlFormatter
 
 OPT = SimpleNamespace()  # global (for now) options
 
@@ -75,6 +78,9 @@ class DependencyMapper:
     def run_asset_hook(self, hook_name, asset, *args, **kwargs):
         """Hooks for extensions, case where a specific asset is relevant."""
         type_ = self.ndef.ASSET_TYPE[asset["type"]]
+        defs_path = str(Path(self.ndef.__file__).parent)
+        if defs_path not in sys.path:
+            sys.path.append(defs_path)
         for extension in type_.extensions:
             module = import_module(extension)
             if hasattr(module, hook_name):
@@ -243,8 +249,18 @@ class DependencyMapper:
         self,
     ):
         """Get Jinja environment for rendering templates"""
-        path = os.path.join(os.path.dirname(__file__), "templates")
-        return jinja2.Environment(loader=jinja2.FileSystemLoader([path]))
+        paths = [
+            Path(__file__).parent / "templates",
+            Path(self.ndef.__file__).parent / "templates",
+        ]
+        env = jinja2.Environment(
+            extensions=["jinja2_highlight.HighlightExtension"],
+            loader=jinja2.FileSystemLoader(paths),
+        )
+        env.globals["pygments_css"] = HtmlFormatter(
+            style="rrt" if OPT.theme == DARK_THEME else "default"
+        ).get_style_defs()
+        return env
 
     def load_assets(self, asset_file):
         """Load YAML data
