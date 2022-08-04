@@ -12,5 +12,7 @@ AssetType = namedtuple(
         "fields",
         "depends",  # regex for node types on which this node type depends
         "prefix",  # short prefix for ids of nodes of this type
+        "extensions",  # for hooks
     ],
+    defaults=[[]],  # default for extensions
 )

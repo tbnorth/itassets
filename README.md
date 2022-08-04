@@ -1,6 +1,6 @@
 # IT Assets
 
-Code to validate and graphically map a database of IT assets.
+Code to validate and graphically map a database of IT assets or other entities.
 
 The database is simply a collection of YAML files describing assets.  Asset
 types include `application/external`, `cloud/service`, `container/docker`,

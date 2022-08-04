@@ -72,6 +72,15 @@ class DependencyMapper:
             print("\n".join(uses))
             raise Exception("Duplicated ASSET_TYPE prefix")
 
+    def run_asset_hook(self, hook_name, asset, *args, **kwargs):
+        """Hooks for extensions, case where a specific asset is relevant."""
+        type_ = self.ndef.ASSET_TYPE[asset["type"]]
+        for extension in type_.extensions:
+            module = import_module(extension)
+            if hasattr(module, hook_name):
+                print(f"Running hook {hook_name} for {asset['type']} {asset['id']}")
+                return getattr(module, hook_name)(self, asset, *args, **kwargs)
+
     def validator(type_):
         """Validator functions get (asset, lookup, dependents) params.
         This decorator takes a regex that matches validators against asset
@@ -492,6 +501,8 @@ class DependencyMapper:
             generated=title.split(" updated ")[-1],
             theme=OPT.theme,
         )
+
+        self.run_asset_hook("get_extra_html", asset, context)
 
         if write:
             template = self.get_jinja().get_template("asset_def.html")

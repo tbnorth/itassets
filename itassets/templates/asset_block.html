@@ -37,6 +37,7 @@
     {% endfor %}
   {% endif %}
 {% endfor %}
+{{extra_html | safe}}
 <div>
 [<a href="{{edit_url}}">edit</a>]
 [<a href="_{{asset.type|replace('/','_')}}.html">all {{asset.type}} assets</a>]
