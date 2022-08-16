@@ -518,6 +518,7 @@ class DependencyMapper:
             theme=OPT.theme,
         )
 
+        context["extra_html"] = ""
         self.run_asset_hook("get_extra_html", asset, context)
 
         if write:
