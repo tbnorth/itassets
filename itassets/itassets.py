@@ -500,6 +500,7 @@ class DependencyMapper:
         finals.sort()
 
         context = dict(
+            narrative=markdown.markdown(keys.pop("narrative", "")),
             asset=asset,
             lookup=lookup,
             issues=[i for i in issues.get(asset["id"], [])],

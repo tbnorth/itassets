@@ -1,17 +1,18 @@
 <div class='asset'>
-<h2>{{asset.id}}: {{asset.name}}</h2>
+<div class="narrative">{{narrative | safe}}</div>
+<h3>{{asset.id}}: {{asset.name}}</h3>
 {% if 'archived' in asset.tags %}<h3>*** NOTICE: this asset is archived ***</h3>{% endif %}
 {% for type_, reason in issues %}
-<div class='issue'><span class='issue_key'><span class='issue_{{type_}}'>{{type_}}:</span></span>
-<span class='issue_val'>{{reason}}</span></div>
+  <div class='issue'><span class='issue_key'><span class='issue_{{type_}}'>{{type_}}:</span></span>
+  <span class='issue_val'>{{reason}}</span></div>
 {% endfor %}
 {% for k in keys %}
-<div class='keyval'><span class='key'>{{k}}:</span> <span class='value'>{{keys[k]}}</span></div>
+  <div class='keyval'><span class='key'>{{k}}:</span> <span class='value'>{{keys[k] | safe}}</span></div>
 {% endfor %}
 {% for i in lists %}
-<div class='list'><span class='listhead'>{{i|upper}}</span></div>
+  <div class='list'><span class='listhead'>{{i|upper}}</span></div>
 {% for item in lists[i] %}
-<div class='item'>{{item}}</div>
+  <div class='item'>{{item}}</div>
 {% endfor %}
 {% endfor %}
 <hr/>
