@@ -63,9 +63,10 @@ MARK_URLS = re.compile(r"(?<!\]\()(?<!<)((?:https?|ftp):\/\/[^\s\]\)]*)")
 
 
 class DependencyMapper:
-    def __init__(self, defs):
+    def __init__(self, opt):
+        self.opt = opt
         # node definitions
-        self.ndef = import_module(defs)
+        self.ndef = import_module(self.opt.defs or "asset_defs.it_assets.itasset_defs")
         self.expanded = set()
         uses = defaultdict(lambda: 0)
         for value in self.ndef.ASSET_TYPE.values():
@@ -218,6 +219,11 @@ class DependencyMapper:
         parser.add_argument(
             "--snippets",
             help="Generate vim snippets for asset types",
+            action="store_true",
+        )
+        parser.add_argument(
+            "--edit-links",
+            help="Include edit links in maps",
             action="store_true",
         )
 
@@ -640,7 +646,7 @@ class DependencyMapper:
                 key=lambda x: other[x]["name"],
             ):
                 attr = dict(fontcolor=OPT.theme["dot_edit_col"])
-                if asset["id"] not in edit_linked:
+                if self.opt.edit_links and asset["id"] not in edit_linked:
                     edit_linked.add(asset["id"])
                     attr.update(
                         dict(
@@ -649,7 +655,11 @@ class DependencyMapper:
                             headtooltip="Edit",
                         )
                     )
-                if self.edit_url(other[dep]) and dep not in edit_linked:
+                if (
+                    self.opt.edit_links
+                    and self.edit_url(other[dep])
+                    and dep not in edit_linked
+                ):
                     # i.e. not an undefined dependency
                     edit_linked.add(dep)
                     attr.update(
@@ -1043,7 +1053,7 @@ class DependencyMapper:
 
 def main():
     opt = DependencyMapper.get_options()
-    dm = DependencyMapper(opt.defs or "asset_defs.it_assets.itasset_defs")
+    dm = DependencyMapper(opt)
     if opt.snippets:
         dm.generate_snippets(opt)
         return
