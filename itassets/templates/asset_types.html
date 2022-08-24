@@ -5,16 +5,18 @@ individual asset type maps linked below, there's a
 <a href="{{top}}_unapplied.html">map of things not used by applications</a>.
 </p><p>
 Overview of dependencies, scroll down or click label for individual asset types.
-</p><p>{{svg}}</p>
+</p>
+{# <p>{{svg}}</p> #}
+<img src="__asset_dep_graph.svg" align="right"/>
+<div style="max-width:9in">
 {% for at in asset_types %}
 <h3 id="{{at.id}}">{{at.id}} <span class="prefix">{{at.prefix}}_</span></h3>
-<img src="__{{at.id|replace('/', '-')}}.svg" style="float:right; margin-right: 50%"/>
+<img src="__{{at.id|replace('/', '-')}}.svg" style="float:right; margin-right: 5em"/>
 <p>{{at.description}}</p>
 <div>Depends on: <code>{{at.depends}}</code></div>
 <div>Required fields: <code>{{at.fields}}</code></div>
 <div>Tags: <code>{{at.tags}}</code></div>
 <div>See [<a href="{{top}}_{{at.id|replace("/", "_")}}.html">{{at.id}} map</a>]</div>
 {% endfor %}
+</div>
 {% endblock %}
-
-

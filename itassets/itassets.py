@@ -731,7 +731,7 @@ class DependencyMapper:
         outfile = f"{OPT.output}/__asset_dep_graph"
         with open(f"{outfile}.dot", "w") as out:
             out.write("\n".join(ans))
-        os.system(f"dot -Tsvg -o{outfile}.svg {outfile}.dot")
+        os.system(f"dot -Tsvg -Grankdir=TB -o{outfile}.svg {outfile}.dot")
 
     def write_reports(self, assets, issues, title, archived):
         """~Query data to make common context for generating various reports,
