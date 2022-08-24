@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import re
 import sys
@@ -16,6 +17,11 @@ import markdown
 import yaml
 from lxml import etree
 from pygments.formatters import HtmlFormatter
+
+logging.basicConfig(
+    format="%(levelname)s:%(name)s:%(msg)s"  # , level=logging.DEBUG
+)
+logger = logging.getLogger("itassets")
 
 OPT = SimpleNamespace()  # global (for now) options
 
@@ -68,12 +74,13 @@ class DependencyMapper:
         # node definitions
         self.ndef = import_module(self.opt.defs or "asset_defs.it_assets.itasset_defs")
         self.expanded = set()
+        self.markdown = markdown.Markdown()
         uses = defaultdict(lambda: 0)
         for value in self.ndef.ASSET_TYPE.values():
             uses[value.prefix] += 1
         uses = [f"{k}: {v}" for k, v in uses.items() if v > 1]
         if uses:
-            print("\n".join(uses))
+            logger.critical("Duplicated ASSET_TYPE prefix %s", "\n".join(uses))
             raise Exception("Duplicated ASSET_TYPE prefix")
 
     def run_asset_hook(self, hook_name, asset, *args, **kwargs):
@@ -85,7 +92,9 @@ class DependencyMapper:
         for extension in type_.extensions:
             module = import_module(extension)
             if hasattr(module, hook_name):
-                print(f"Running hook {hook_name} for {asset['type']} {asset['id']}")
+                logger.info(
+                    f"Running hook {hook_name} for {asset['type']} {asset['id']}"
+                )
                 return getattr(module, hook_name)(self, asset, *args, **kwargs)
 
     def validator(type_):
@@ -268,6 +277,13 @@ class DependencyMapper:
         ).get_style_defs()
         return env
 
+    def md_to_html(self, md_src, no_para=False):
+        """Convert markdown to HTML"""
+        html = self.markdown.reset().convert(md_src)
+        if no_para:
+            html = html[3:-4]  # crude removal of <p>wrapper</p> in lists etc.
+        return html
+
     def load_assets(self, asset_file):
         """Load YAML data
 
@@ -303,18 +319,20 @@ class DependencyMapper:
                 id_ = asset["id"]
                 if id_ in seen:
                     duplicate_IDs = True
-                    print(f"ERROR: {id_} already seen")
-                    print(
+                    logger.critical(f"ERROR: {id_} already seen")
+                    logger.critical(
                         "  First used in ",
                         f"{seen[id_]['file_data']['file_path']}",
                     )
-                    print(f"  Duplicated in {asset['file_data']['file_path']}")
+                    logger.critical(
+                        f"  Duplicated in {asset['file_data']['file_path']}"
+                    )
                 else:
                     seen[id_] = asset
                 for dep in self.asset_dep_ids(asset):
                     dependents[dep].append(id_)
             except Exception:
-                print(f"Failed validating {asset}")
+                logger.critical(f"Failed validating {asset}")
         if duplicate_IDs:
             raise Exception("Can't continue with duplicate IDs present")
 
@@ -337,12 +355,12 @@ class DependencyMapper:
             finally:
                 if issues:
                     failures[asset["id"]] = issues
-                    print(
-                        f"\nASSET: {asset['id']} '{asset.get('name')}'"
-                        f"\n       in {asset['file_data']['file_path']}"
+                    logger.warning(
+                        f"Validation fail for {asset['id']} '{asset.get('name')}'"
+                        f" in {asset['file_data']['file_path']}"
                     )
                 for type_, description in issues:
-                    print(f"    {type_}: {description}")
+                    logger.info(f"    {type_}: {description}")
 
         return failures
 
@@ -436,7 +454,7 @@ class DependencyMapper:
         }
         keys["defined_in"] = asset["file_data"]["file_path"]
         lists = {
-            k: [self.link_links(i) for i in v]
+            k: [self.md_to_html(i, no_para=True) for i in v]
             for k, v in asset.items()
             if not k.startswith("_")
             and isinstance(asset[k], list)
@@ -506,7 +524,7 @@ class DependencyMapper:
         finals.sort()
 
         context = dict(
-            narrative=markdown.markdown(keys.pop("narrative", "")),
+            narrative=self.md_to_html(keys.pop("narrative", "")),
             asset=asset,
             lookup=lookup,
             issues=[i for i in issues.get(asset["id"], [])],
@@ -588,7 +606,10 @@ class DependencyMapper:
             [
                 f"{k} ** {v} **  "  # two trailing spaces for a line block
                 for k, v in asset.items()
-                if isinstance(v, str) and not k.startswith("_") and not k == "narrative"
+                if isinstance(v, str)
+                and not k.startswith("_")
+                and not k == "narrative"
+                and k not in self.ndef.LIST_FIELDS
             ]
         )
         tooltip.append("")
@@ -604,7 +625,7 @@ class DependencyMapper:
         # tooltip.append(f"Defined in {asset['file_data']['file_path']}")
         if asset.get("narrative"):
             tooltip += [""] + [asset["narrative"]]
-        tooltip = markdown.markdown(MARK_URLS.sub("<\\1>", "\n".join(tooltip)))
+        tooltip = self.md_to_html(MARK_URLS.sub("<\\1>", "\n".join(tooltip)))
         return tooltip.replace('"', "'")  # " -> ' for use in dot's tooltip="..."
 
     def assets_to_dot(self, assets, issues, title, top):
@@ -701,13 +722,11 @@ class DependencyMapper:
             if asset_type.depends:
                 pattern = f"({'|'.join(i+'$' for i in asset_type.depends)})"
                 deps = re.compile(pattern)
-                print(f"{key} {pattern}")
                 for other in self.ndef.ASSET_TYPE:
                     if other == key:
                         continue
                     if deps.match(other):
                         ans += [f"{other.replace('/', '_')} -> {node}"]
-                        print(f"{other} => {node}")
         ans += ["}"]
         outfile = f"{OPT.output}/__asset_dep_graph"
         with open(f"{outfile}.dot", "w") as out:
@@ -785,7 +804,7 @@ class DependencyMapper:
             base = "index" + (
                 "_ALL" if len(submap) > 1 else ("_" + submap[0]) if submap else ""
             )
-            print(f"Writing submap {base}")
+            logger.info(f"Writing submap {base}")
             top_assets = deepcopy(assets)
             self.expanded = set(submap)
             self.collapse_assets(top_assets)
@@ -864,10 +883,9 @@ class DependencyMapper:
                     for dep in self.asset_dep_ids(asset):
                         if dep in lookup and lookup[dep] not in use:
                             use.append(lookup[dep])
-                print(f"Added {len(use)-(old_len or 0)}")
                 old_len = len(use)
 
-        print(f"Showing {len(use)} of {len(assets)} assets for {base}")
+        logger.info(f"Showing {len(use)} of {len(assets)} assets for {base}")
 
         top = ""
         with open(f"{OPT.output}/{base}.dot", "w") as out:
@@ -876,7 +894,11 @@ class DependencyMapper:
         os.system(f"dot -Tsvg -o{OPT.output}/{base}.svg {OPT.output}/{base}.dot")
 
         generated = title.split(" updated ")[-1]
-        subset = "All assets" if base == "index" else f"{leads_to} assets only"
+        subset = (
+            "All assets"
+            if base in ("index", "index_ALL")
+            else f"{leads_to} assets only"
+        )
         if negate:
             subset = f"Assets not leading to an asset of type {leads_to}"
 
@@ -991,7 +1013,7 @@ class DependencyMapper:
             try:
                 assets.extend(self.load_assets(asset_file))
             except Exception:
-                print(f"Failed reading {asset_file}")
+                logger.critical(f"Failed reading {asset_file}")
                 raise
 
         # separate archived assets
@@ -1046,7 +1068,7 @@ class DependencyMapper:
                 assets = [i for i in assets if i not in use]
             else:
                 assets = use
-            print(f"Showing {len(assets)} of {n} assets")
+            logger.info(f"Showing {len(assets)} of {n} assets")
 
         self.write_maps(assets, issues, title)
 

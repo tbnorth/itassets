@@ -5,6 +5,7 @@ COPY itassets/requirements.txt /itassets/
 RUN apk update \
  && apk upgrade \
  && apk add git openssh-client graphviz ttf-freefont py3-jinja2 py3-lxml py-pip \
+ && chmod a+rw /var/cache/fontconfig \
  && pip3 install -r /itassets/requirements.txt
 
 # this doesn't work because we want to `-v /some/path:/root/.ssh at runtime
