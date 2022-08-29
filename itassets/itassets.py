@@ -18,9 +18,7 @@ import yaml
 from lxml import etree
 from pygments.formatters import HtmlFormatter
 
-logging.basicConfig(
-    format="%(levelname)s:%(name)s:%(msg)s"  # , level=logging.DEBUG
-)
+logging.basicConfig(format="%(levelname)s:%(name)s:%(msg)s")  # , level=logging.DEBUG
 logger = logging.getLogger("itassets")
 
 OPT = SimpleNamespace()  # global (for now) options
@@ -638,7 +636,18 @@ class DependencyMapper:
 
         for _node_id, asset in enumerate(assets):
             asset["_node_id"] = f"n{_node_id}"
+
+        linked = set()
         for asset in assets:
+            dependents = [i for i in self.asset_dep_ids(asset) if not i.startswith("^")]
+            if dependents:
+                linked.add(asset["id"])
+                linked.update(dependents)
+
+        for asset in assets:
+
+            if asset["type"] == "group/concept" and asset["id"] not in linked:
+                continue  # don't render disconnected groups
 
             tooltip = self.get_tooltip(asset, issues)
 
@@ -999,7 +1008,7 @@ class DependencyMapper:
             container = lookup[contained_by[asset["id"]]]
             for upstream in deps_on:
                 if (
-                    upstream not in container.get("depends_on")
+                    upstream not in container.get("depends_on", [])
                     and upstream != container["id"]
                 ):
                     container.setdefault("depends_on", []).append(upstream)
