@@ -19,14 +19,16 @@ let jQ = jQuery;
 function hilite() {
 
    let geoms = "polygon, ellipse, path, polyline";
-   let frag = window.location.hash.replace('#', '');
-   if (frag in a2s) {
-       jQ("#graph0 g.node").find(geoms).css({stroke: '#808080'});
-       let node = jQ(`#${a2s[frag]}`).find(geoms);
-       node.css({stroke: 'green'});
-       let y = node.offset().top;
-       let w = window.innerHeight;
-       jQ([document.documentElement, document.body]).scrollTop(y-w/2);
+   let frags = window.location.hash.replace('#', '').split(",");
+   jQ("#graph0 g.node").find(geoms).css({stroke: '#808080'});
+   for (frag of frags) {
+       if (frag in a2s) {
+           let node = jQ(`#${a2s[frag]}`).find(geoms);
+           node.css({stroke: 'green', 'stroke-width': '2px'});
+           // let y = node.offset().top;
+           // let w = window.innerHeight;
+           // jQ([document.documentElement, document.body]).scrollTop(y-w/2);
+       }
    }
    function content() {
        return jQ(this).parent().attr("xlink:xtitle")

@@ -652,9 +652,13 @@ class DependencyMapper:
             tooltip = self.get_tooltip(asset, issues)
 
             # dict of dot / graphviz node attributes
+            if asset.get("contains"):
+                highlight = ",".join([asset["id"]] + asset["contains"])
+            else:
+                highlight = asset["id"]
             attr = dict(
                 label=self.dot_node_name(asset),
-                URL=top + self.html_filename(asset, map_mode=True) + "#" + asset["id"],
+                URL=top + self.html_filename(asset, map_mode=True) + "#" + highlight,
                 target=f"_{asset['id']}",
             )
             if False:  # used to generate demo output
