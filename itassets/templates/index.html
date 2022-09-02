@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% macro menu() %}
 <p>
-<a target="_map" href="{{top}}index_ALL.html{% if asset %}#{{asset.id}}{% endif %}">Map</a>
+<a target="_map" href="{{top}}{% if asset %}{{asset._map_page}}#{{asset.id}}{% else %}index_ALL.html{% endif %}">Map</a>
 <a target="_list" href="{{top}}_asset_types.html">Asset types</a>
 <a target="_list" href="{{top}}_list.html">List</a>
 {# <a target="_list" href="{{top}}_applications.html">Applications</a> #}

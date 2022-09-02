@@ -539,6 +539,9 @@ class DependencyMapper:
             dep_map=dep_map,
             generated=title.split(" updated ")[-1],
             theme=OPT.theme,
+            all_of_type=",".join(
+                i for i in lookup if lookup[i]["type"] == asset["type"]
+            ),
         )
 
         context["extra_html"] = ""
@@ -908,8 +911,8 @@ class DependencyMapper:
 
         generated = title.split(" updated ")[-1]
         subset = (
-            "All assets"
-            if base in ("index", "index_ALL")
+            ""  # was "All assets" but confusing in many contexts
+            if base in ("index", "index_ALL") or leads_to == ".*"
             else f"{leads_to} assets only"
         )
         if negate:
@@ -1035,17 +1038,20 @@ class DependencyMapper:
 
         VALIDATORS_COMPILED.update({re.compile(k): v for k, v in VALIDATORS.items()})
         issues = self.validate_assets(assets)
+        lookup = {i["id"]: i for i in assets}
         for asset in assets + archived:
             asset["_reppath"] = self.html_filename(asset)
             asset["_self.edit_url"] = self.edit_url(asset)
             asset["_self.dep_types"] = self.dep_types(asset)  # immediate deps
             if asset["id"] in issues:
                 asset["_class"] = "issues"
+            for contained in asset.get("contains", []):
+                lookup[contained]["_contained_by"] = asset["id"]
+            asset["_map_page"] = self.map_for_asset(asset)
 
         # add _dependent_types to each asset listing types of all dependents
         self.propagate_dependent(assets, output="_dependent_types", field="type")
         self.propagate_dependent(assets, output="_dependent_ids", field="id")
-        lookup = {i["id"]: i for i in assets}
         for asset in assets:
             asset.setdefault("_dependents", [])  # so they all have it
             for dep in self.asset_dep_ids(asset):
@@ -1053,6 +1059,13 @@ class DependencyMapper:
                     lookup[dep].setdefault("_dependents", []).append(asset["id"])
 
         return assets, archived, lookup, issues
+
+    def map_for_asset(self, asset):
+        """Depending on containment, work out if asset is on index.html or
+        index_grp_foo.html"""
+        if in_ := asset.get("_contained_by"):
+            return f"index_{in_}.html"
+        return "index.html"
 
     def generate_outputs(self, opt, assets, archived, lookup, issues):
 
