@@ -888,6 +888,16 @@ class DependencyMapper:
                 a2s[target[0][1:]] = node.get("id")
         return a2s
 
+    def remove_targets(self, svg: str) -> str:
+        """Having used the @target attribute to carry the information extracted by
+        asset_to_svg() from the .dot file to the .svg file, we don't actually want the
+        "open a new tab" behavior caused by the target attribute, so remove them now.
+        """
+        dom = etree.fromstring(svg.encode("utf8"))
+        for target in dom.xpath("//*[@target]"):
+            del target.attrib["target"]
+        return etree.tostring(dom).decode("utf8")
+
     def write_map(self, base, assets, issues, title, leads_to, in_field, negate=False):
         """Output HTML containing SVG graph of assets, see self.write_maps()"""
         use = [
@@ -933,6 +943,7 @@ class DependencyMapper:
         # and remove this so jQuery tooltip is used, not browser default title display
         svg = re.sub(r"<title>.*</title>", "", svg)
         asset_map = self.asset_to_svg(svg)
+        svg = self.remove_targets(svg)
         context = dict(
             title=title,
             imap=svg,
