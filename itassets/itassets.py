@@ -65,6 +65,15 @@ VALIDATORS_COMPILED = {}  # updated in main()
 # Used to put URLs not proceeded by ]( or < in <> to make links in markdown.
 MARK_URLS = re.compile(r"(?<!\]\()(?<!<)((?:https?|ftp):\/\/[^\s\]\)]*)")
 
+HTACCESS_NOCACHE = """
+# DISABLE CACHING
+<IfModule mod_headers.c>
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires 0
+</IfModule>
+"""
+
 
 class DependencyMapper:
     def __init__(self, opt):
@@ -303,7 +312,7 @@ class DependencyMapper:
                 return asset["file_data"]["general"]
             except KeyError:
                 pass
-        return None
+        return {}
 
     def validate_assets(self, assets):
         """Print validation errors and return mapping from asset to errors"""
@@ -587,11 +596,7 @@ class DependencyMapper:
 
     def get_title(self, opt, assets):
         """Overall title from a `general` section, plus time"""
-        ttl = self.general_info(assets)
-        if ttl:
-            ttl = ttl["title"]
-        else:
-            ttl = ""
+        ttl = self.general_info(assets).get("title", "")
         updated = opt.updated or time.asctime()
         return f"{ttl} updated {updated}"
 
@@ -891,14 +896,13 @@ class DependencyMapper:
             if any(re.search(f"^{leads_to}$", j) for j in (i.get(in_field) or []))
         ]
         if negate:
-            lookup = {i["id"]: i for i in assets}
             use = [i for i in assets if i not in use]
             old_len = None
             while old_len != len(use):
                 for asset in list(use):
                     for dep in self.asset_dep_ids(asset):
-                        if dep in lookup and lookup[dep] not in use:
-                            use.append(lookup[dep])
+                        if dep in self.lookup and self.lookup[dep] not in use:
+                            use.append(self.lookup[dep])
                 old_len = len(use)
 
         logger.info(f"Showing {len(use)} of {len(assets)} assets for {base}")
@@ -915,6 +919,11 @@ class DependencyMapper:
             if base in ("index", "index_ALL") or leads_to == ".*"
             else f"{leads_to} assets only"
         )
+        if not subset:
+            id_ = base.split("_", 1)[-1]  # FIXME weak
+            top_level_name = self.general_info(assets).get("title", "")
+            subset = self.lookup.get(id_, {}).get("name", top_level_name)
+
         if negate:
             subset = f"Assets not leading to an asset of type {leads_to}"
 
@@ -1038,7 +1047,7 @@ class DependencyMapper:
 
         VALIDATORS_COMPILED.update({re.compile(k): v for k, v in VALIDATORS.items()})
         issues = self.validate_assets(assets)
-        lookup = {i["id"]: i for i in assets}
+        self.lookup = {i["id"]: i for i in assets}
         for asset in assets + archived:
             asset["_reppath"] = self.html_filename(asset)
             asset["_self.edit_url"] = self.edit_url(asset)
@@ -1046,7 +1055,7 @@ class DependencyMapper:
             if asset["id"] in issues:
                 asset["_class"] = "issues"
             for contained in asset.get("contains", []):
-                lookup[contained]["_contained_by"] = asset["id"]
+                self.lookup[contained]["_contained_by"] = asset["id"]
             asset["_map_page"] = self.map_for_asset(asset)
 
         # add _dependent_types to each asset listing types of all dependents
@@ -1055,10 +1064,10 @@ class DependencyMapper:
         for asset in assets:
             asset.setdefault("_dependents", [])  # so they all have it
             for dep in self.asset_dep_ids(asset):
-                if dep in lookup:
-                    lookup[dep].setdefault("_dependents", []).append(asset["id"])
+                if dep in self.lookup:
+                    self.lookup[dep].setdefault("_dependents", []).append(asset["id"])
 
-        return assets, archived, lookup, issues
+        return assets, archived, self.lookup, issues
 
     def map_for_asset(self, asset):
         """Depending on containment, work out if asset is on index.html or
@@ -1071,6 +1080,7 @@ class DependencyMapper:
 
         title = self.get_title(opt, assets)
         os.makedirs(OPT.output, exist_ok=True)
+        (Path(OPT.output) / ".htaccess").write_text(HTACCESS_NOCACHE)
         for asset in assets:  # after all dependents recorded
             self.report_to_html(asset, lookup, issues, title)
         for asset in archived:
